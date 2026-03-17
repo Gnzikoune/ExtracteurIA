@@ -1,0 +1,58 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and usage tracking",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "extractionCount": { "type": "number", "description": "Number of links extracted by the user" },
+        "lastActive": { "type": "string", "format": "date-time" }
+      },
+      "required": ["extractionCount"]
+    },
+    "Extraction": {
+      "title": "Extraction",
+      "description": "A single extraction history record",
+      "type": "object",
+      "properties": {
+        "url": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "linksCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" }
+      },
+      "required": ["url", "createdAt", "userId"]
+    },
+    "Analysis": {
+      "title": "Analysis",
+      "description": "Comprehensive data layer for a scanned URL",
+      "type": "object",
+      "properties": {
+        "url": { "type": "string" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "scanType": { "type": "string" },
+        "raw": { "type": "object" },
+        "metrics": { "type": "object" },
+        "ai": { "type": "object" }
+      },
+      "required": ["url", "userId", "createdAt", "scanType", "raw", "metrics"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User data"
+    },
+    "/users/{userId}/extractions/{extractionId}": {
+      "schema": { "$ref": "#/entities/Extraction" },
+      "description": "User's extraction history"
+    },
+    "/analyses/{analysisId}": {
+      "schema": { "$ref": "#/entities/Analysis" },
+      "description": "Global analyses database"
+    }
+  }
+}

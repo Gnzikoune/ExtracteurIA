@@ -1,0 +1,92 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (matches auth.uid)
+    // Fields:
+    //   - email: string (required) - user's email
+    //   - extractionCount: number (required) - number of links extracted
+    //   - lastActive: string (optional) - last activity timestamp
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['email', 'extractionCount', 'lastActive']) &&
+             (!('email' in data) || data.email is string) &&
+             data.extractionCount is number &&
+             data.extractionCount >= 0 &&
+             data.extractionCount <= 20 &&
+             (!('lastActive' in data) || data.lastActive is string);
+    }
+
+    function isValidExtraction(data) {
+      return hasOnlyAllowedFields(['url', 'title', 'description', 'linksCount', 'createdAt', 'userId']) &&
+             data.url is string && data.url.size() < 2000 &&
+             data.title is string && data.title.size() < 1000 &&
+             data.description is string && data.description.size() < 5000 &&
+             data.linksCount is number &&
+             data.createdAt is string &&
+             data.userId is string && data.userId == request.auth.uid;
+    }
+
+    function isValidAnalysis(data) {
+      return hasOnlyAllowedFields(['url', 'userId', 'createdAt', 'scanType', 'raw', 'metrics', 'ai']) &&
+             data.url is string && data.url.size() < 2000 &&
+             data.userId is string && data.userId == request.auth.uid &&
+             data.createdAt is string &&
+             data.scanType is string &&
+             data.raw is map &&
+             data.metrics is map &&
+             (!('ai' in data) || data.ai is map);
+    }
+
+    match /users/{userId} {
+      // Users can only read their own data
+      allow read: if isOwner(userId);
+      
+      // Users can create their own profile, starting with 0 extractions
+      allow create: if isOwner(userId) && 
+                    isValidUser(request.resource.data) &&
+                    request.resource.data.extractionCount == 0;
+                    
+      // Users can update their own profile, but only increment extractionCount by 1
+      allow update: if isOwner(userId) && 
+                    isValidUser(request.resource.data) &&
+                    (!('email' in request.resource.data) || !('email' in resource.data) || request.resource.data.email == resource.data.email) &&
+                    (request.resource.data.extractionCount == resource.data.extractionCount || 
+                     request.resource.data.extractionCount == resource.data.extractionCount + 1);
+
+      match /extractions/{extractionId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidExtraction(request.resource.data);
+        allow update, delete: if false; // Extractions are immutable
+      }
+    }
+
+    match /analyses/{analysisId} {
+      allow create: if isAuthenticated() && isValidAnalysis(request.resource.data);
+      allow update: if isAuthenticated() && 
+                    resource.data.userId == request.auth.uid &&
+                    isValidAnalysis(request.resource.data) &&
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ai']);
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+  }
+}

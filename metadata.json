@@ -1,0 +1,5 @@
+{
+  "name": "ExtracteurIA",
+  "description": "Extracts all links from a given URL and uses Gemini to analyze and categorize them.",
+  "requestFramePermissions": []
+}
