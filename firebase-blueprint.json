@@ -7,7 +7,8 @@
       "properties": {
         "email": { "type": "string" },
         "extractionCount": { "type": "number", "description": "Number of links extracted by the user" },
-        "lastActive": { "type": "string", "format": "date-time" }
+        "lastActive": { "type": "string", "format": "date-time" },
+        "role": { "type": "string", "enum": ["user", "admin"] }
       },
       "required": ["extractionCount"]
     },
@@ -32,6 +33,7 @@
       "properties": {
         "url": { "type": "string" },
         "userId": { "type": "string" },
+        "isAnonymous": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" },
         "scanType": { "type": "string" },
         "raw": { "type": "object" },
@@ -39,6 +41,16 @@
         "ai": { "type": "object" }
       },
       "required": ["url", "userId", "createdAt", "scanType", "raw", "metrics"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Global application settings",
+      "type": "object",
+      "properties": {
+        "maxAnonExtractions": { "type": "number" },
+        "maxUserExtractions": { "type": "number" }
+      },
+      "required": ["maxAnonExtractions", "maxUserExtractions"]
     }
   },
   "firestore": {
@@ -53,6 +65,10 @@
     "/analyses/{analysisId}": {
       "schema": { "$ref": "#/entities/Analysis" },
       "description": "Global analyses database"
+    },
+    "/settings/{docId}": {
+      "schema": { "$ref": "#/entities/Settings" },
+      "description": "Global settings"
     }
   }
 }

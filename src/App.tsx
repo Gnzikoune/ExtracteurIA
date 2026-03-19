@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Link as LinkIcon, ExternalLink, Loader2, Sparkles, AlertCircle, LayoutGrid, List as ListIcon, LogOut, User as UserIcon, CheckCircle2, XCircle, ArrowRight, Rocket, FileJson, FileSpreadsheet } from 'lucide-react';
+import { Search, Link as LinkIcon, ExternalLink, Loader2, Sparkles, AlertCircle, LayoutGrid, List as ListIcon, LogOut, User as UserIcon, CheckCircle2, XCircle, ArrowRight, Rocket, FileJson, FileSpreadsheet, History, ShieldAlert } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User, signInAnonymously } from 'firebase/auth';
-import { doc, getDoc, setDoc, onSnapshot, collection, addDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, collection, addDoc, query, orderBy, getDocs, limit, where } from 'firebase/firestore';
+
+import { HistoryView } from './components/HistoryView';
+import { AdminView } from './components/AdminView';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -56,14 +59,26 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [deepScan, setDeepScan] = useState(false);
   const [showQuotaModal, setShowQuotaModal] = useState(false);
+  const [currentView, setCurrentView] = useState<'dashboard' | 'history' | 'admin'>('dashboard');
 
   // Auth & Usage State
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [userExtractions, setUserExtractions] = useState(0);
+  const [isAdmin, setIsAdmin] = useState(false);
 
-  const MAX_ANON_EXTRACTIONS = 2;
-  const MAX_USER_EXTRACTIONS = 50;
+  // Settings State
+  const [maxAnonExtractions, setMaxAnonExtractions] = useState(2);
+  const [maxUserExtractions, setMaxUserExtractions] = useState(50);
+  const [geminiApiKey, setGeminiApiKey] = useState<string | null>(null);
+  const [emailVerifyApiKey, setEmailVerifyApiKey] = useState<string | null>(null);
+
+  // History & Admin State
+  const [history, setHistory] = useState<any[]>([]);
+  const [allHistory, setAllHistory] = useState<any[]>([]);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [isLoadingAdmin, setIsLoadingAdmin] = useState(false);
 
   // Inactivity Timeout (5 minutes)
   const resetInactivityTimer = useCallback(() => {
@@ -111,24 +126,75 @@ export default function App() {
         handleFirestoreError(error, OperationType.GET, `users/${currentUser.uid}`);
         return;
       }
+
+      // Check email verification if not anonymous and API key is present
+      let emailStatus = userSnap.exists() ? userSnap.data().emailStatus : undefined;
+      
+      if (!currentUser.isAnonymous && currentUser.email && emailVerifyApiKey && emailStatus !== 'ok') {
+        try {
+          const res = await fetch(`https://apps.emaillistverify.com/api/verifyEmail?secret=${emailVerifyApiKey}&email=${currentUser.email}`);
+          const status = await res.text();
+          
+          if (['disposable', 'invalid', 'spam_trap'].includes(status)) {
+            emailStatus = 'invalid';
+            await signOut(auth);
+            setError("Votre adresse email n'est pas autorisée (email temporaire ou invalide).");
+            return;
+          } else {
+            emailStatus = 'ok';
+          }
+        } catch (e) {
+          console.error("Email verification failed", e);
+        }
+      }
       
       if (!userSnap.exists()) {
         try {
           await setDoc(userRef, {
             email: currentUser.email || 'Anonyme',
             extractionCount: 0,
-            lastActive: new Date().toISOString()
+            lastActive: new Date().toISOString(),
+            role: 'user',
+            ...(emailStatus ? { emailStatus } : {})
           });
           setUserExtractions(0);
+          setIsAdmin(currentUser.email === 'gnzikoune@gmail.com');
         } catch (error) {
           handleFirestoreError(error, OperationType.WRITE, `users/${currentUser.uid}`);
         }
       } else {
+        // Update emailStatus if it was just verified
+        if (emailStatus === 'ok' && userSnap.data().emailStatus !== 'ok') {
+          try {
+            await setDoc(userRef, { emailStatus: 'ok' }, { merge: true });
+          } catch (e) {
+            console.error("Failed to update emailStatus", e);
+          }
+        }
         setUserExtractions(userSnap.data().extractionCount || 0);
+        setIsAdmin(currentUser.email === 'gnzikoune@gmail.com' || userSnap.data().role === 'admin');
       }
     });
 
     return () => unsubscribe();
+  }, [emailVerifyApiKey]);
+
+  useEffect(() => {
+    // Fetch global settings
+    const settingsRef = doc(db, 'settings', 'global');
+    const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.maxAnonExtractions !== undefined) setMaxAnonExtractions(data.maxAnonExtractions);
+        if (data.maxUserExtractions !== undefined) setMaxUserExtractions(data.maxUserExtractions);
+        if (data.geminiApiKey) setGeminiApiKey(data.geminiApiKey);
+        if (data.emailVerifyApiKey) setEmailVerifyApiKey(data.emailVerifyApiKey);
+      }
+    }, (error) => {
+      console.error("Failed to fetch settings:", error);
+    });
+
+    return () => unsubscribeSettings();
   }, []);
 
   useEffect(() => {
@@ -188,17 +254,58 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    if (currentView === 'history' && user && !user.isAnonymous) {
+      setIsLoadingHistory(true);
+      const fetchHistory = async () => {
+        try {
+          const q = query(collection(db, 'analyses'), where('userId', '==', user.uid), orderBy('createdAt', 'desc'), limit(50));
+          const querySnapshot = await getDocs(q);
+          const userHistory = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setHistory(userHistory);
+        } catch (error) {
+          console.error("Failed to fetch history:", error);
+        } finally {
+          setIsLoadingHistory(false);
+        }
+      };
+      fetchHistory();
+    }
+  }, [currentView, user]);
+
+  useEffect(() => {
+    if (currentView === 'admin' && isAdmin) {
+      setIsLoadingAdmin(true);
+      const fetchAdminData = async () => {
+        try {
+          const analysesQuery = query(collection(db, 'analyses'), orderBy('createdAt', 'desc'), limit(100));
+          const analysesSnap = await getDocs(analysesQuery);
+          setAllHistory(analysesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+
+          const usersQuery = query(collection(db, 'users'), limit(100));
+          const usersSnap = await getDocs(usersQuery);
+          setAllUsers(usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        } catch (error) {
+          console.error("Failed to fetch admin data:", error);
+        } finally {
+          setIsLoadingAdmin(false);
+        }
+      };
+      fetchAdminData();
+    }
+  }, [currentView, isAdmin]);
+
   const handleExtract = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url) return;
 
     // Check limits
-    if (user?.isAnonymous && userExtractions >= MAX_ANON_EXTRACTIONS) {
+    if (user?.isAnonymous && userExtractions >= maxAnonExtractions) {
       setShowQuotaModal(true);
       return;
     }
-    if (!user?.isAnonymous && userExtractions >= MAX_USER_EXTRACTIONS) {
-      setError(`Vous avez atteint la limite maximale de ${MAX_USER_EXTRACTIONS} liens pour votre compte.`);
+    if (!user?.isAnonymous && userExtractions >= maxUserExtractions) {
+      setError(`Vous avez atteint la limite maximale de ${maxUserExtractions} liens pour votre compte.`);
       return;
     }
 
@@ -210,6 +317,39 @@ export default function App() {
     setCurrentAnalysisId(null);
 
     try {
+      // Check for existing analysis
+      const normalizedUrl = new URL(url).href;
+      const q = query(collection(db, 'analyses'), where('url', '==', normalizedUrl.substring(0, 1999)), limit(1));
+      const querySnapshot = await getDocs(q);
+      
+      if (!querySnapshot.empty) {
+        const existingDoc = querySnapshot.docs[0];
+        const existingData = existingDoc.data();
+        
+        setPageData({
+          title: existingData.raw.title,
+          description: existingData.raw.description,
+          links: existingData.raw.links,
+          pagesCrawled: existingData.raw.pagesCrawled
+        });
+        
+        if (existingData.ai) {
+          setAiAnalysis({
+            score_global: existingData.ai.scoreGlobal,
+            main_message: existingData.ai.mainMessage,
+            scores: existingData.ai.scores,
+            problems: existingData.ai.problems,
+            opportunities: existingData.ai.opportunities,
+            business_type: existingData.ai.businessType,
+            categories: existingData.ai.categories
+          });
+        }
+        
+        setCurrentAnalysisId(existingDoc.id);
+        setIsLoading(false);
+        return;
+      }
+
       const response = await fetch('/api/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -232,10 +372,11 @@ export default function App() {
       // Get unique internal URLs
       const uniqueInternalUrls = new Set(internalLinks.map((l: ExtractedLink) => l.href.split('#')[0]));
       
-      const hasContactPage = Array.from(uniqueInternalUrls).some(href => href.toLowerCase().includes('contact'));
-      const hasAboutPage = Array.from(uniqueInternalUrls).some(href => href.toLowerCase().includes('about') || href.toLowerCase().includes('propos'));
-      const hasServicesPage = Array.from(uniqueInternalUrls).some(href => href.toLowerCase().includes('service') || href.toLowerCase().includes('produit'));
+      const hasContactPage = Array.from(uniqueInternalUrls).some(href => typeof href === 'string' && href.toLowerCase().includes('contact'));
+      const hasAboutPage = Array.from(uniqueInternalUrls).some(href => typeof href === 'string' && (href.toLowerCase().includes('about') || href.toLowerCase().includes('propos')));
+      const hasServicesPage = Array.from(uniqueInternalUrls).some(href => typeof href === 'string' && (href.toLowerCase().includes('service') || href.toLowerCase().includes('produit')));
       const hasActionPage = Array.from(uniqueInternalUrls).some(href => {
+        if (typeof href !== 'string') return false;
         const h = href.toLowerCase();
         return h.includes('signup') || h.includes('login') || h.includes('buy') || h.includes('reservation') || h.includes('cart') || h.includes('panier');
       });
@@ -256,8 +397,9 @@ export default function App() {
       if (user) {
         try {
           const analysisRef = await addDoc(collection(db, 'analyses'), {
-            url: url.substring(0, 1999),
+            url: normalizedUrl.substring(0, 1999),
             userId: user.uid,
+            isAnonymous: user.isAnonymous,
             createdAt: new Date().toISOString(),
             scanType: deepScan && !user.isAnonymous ? 'deep' : 'single_page',
             raw: {
@@ -292,7 +434,7 @@ export default function App() {
 
           // Save extraction history
           await addDoc(collection(db, 'users', user.uid, 'extractions'), {
-            url: url.substring(0, 1999),
+            url: normalizedUrl.substring(0, 1999),
             title: (data.title || '').substring(0, 999),
             description: (data.description || '').substring(0, 4999),
             linksCount: data.links?.length || 0,
@@ -317,7 +459,7 @@ export default function App() {
     setAiError(null);
 
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = geminiApiKey || process.env.GEMINI_API_KEY;
       if (!apiKey) {
         throw new Error('La clé API Gemini n\'est pas configurée');
       }
@@ -460,7 +602,7 @@ export default function App() {
     if (!pageData) return;
     const linkToCategory = new Map<string, string>();
     if (aiAnalysis) {
-      Object.entries(aiAnalysis.categories).forEach(([cat, links]) => {
+      (Object.entries(aiAnalysis.categories) as [string, ExtractedLink[]][]).forEach(([cat, links]) => {
         links.forEach(l => linkToCategory.set(l.href, cat));
       });
     }
@@ -498,11 +640,34 @@ export default function App() {
           <h1 className="font-semibold text-lg tracking-tight">Extracteur</h1>
         </div>
         
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-          <div className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg font-medium flex items-center gap-3">
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+          <button 
+            onClick={() => setCurrentView('dashboard')}
+            className={cn("w-full px-3 py-2.5 rounded-lg font-medium flex items-center gap-3 transition-colors", currentView === 'dashboard' ? "bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900")}
+          >
             <LayoutGrid className="w-5 h-5" />
             Tableau de bord
-          </div>
+          </button>
+          
+          {user && !user.isAnonymous && (
+            <button 
+              onClick={() => setCurrentView('history')}
+              className={cn("w-full px-3 py-2.5 rounded-lg font-medium flex items-center gap-3 transition-colors", currentView === 'history' ? "bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900")}
+            >
+              <History className="w-5 h-5" />
+              Historique
+            </button>
+          )}
+
+          {isAdmin && (
+            <button 
+              onClick={() => setCurrentView('admin')}
+              className={cn("w-full px-3 py-2.5 rounded-lg font-medium flex items-center gap-3 transition-colors", currentView === 'admin' ? "bg-purple-50 text-purple-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900")}
+            >
+              <ShieldAlert className="w-5 h-5" />
+              Administration
+            </button>
+          )}
         </nav>
 
         {/* User Profile in Sidebar */}
@@ -531,7 +696,7 @@ export default function App() {
               </div>
             ) : (
               <div className="text-center">
-                <p className="text-sm text-slate-500 mb-3">Mode gratuit ({userExtractions}/{MAX_ANON_EXTRACTIONS})</p>
+                <p className="text-sm text-slate-500 mb-3">Mode gratuit ({userExtractions}/{maxAnonExtractions})</p>
                 <button 
                   onClick={handleLogin}
                   className="w-full px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-medium rounded-lg transition-colors text-sm"
@@ -589,7 +754,7 @@ export default function App() {
               <div className="flex items-center gap-4 sm:gap-6 text-sm font-medium text-slate-600">
                 <span className="hidden sm:inline-flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full text-slate-600 text-xs font-semibold border border-slate-200">
                   <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                  Gratuit : {userExtractions}/{MAX_ANON_EXTRACTIONS}
+                  Gratuit : {userExtractions}/{maxAnonExtractions}
                 </span>
                 <button onClick={handleLogin} className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5">
                   Se connecter
@@ -599,11 +764,11 @@ export default function App() {
           </header>
         )}
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto pb-24 md:pb-8">
           <div className="max-w-6xl mx-auto space-y-8">
             
             {/* Top Dashboard Stats */}
-            {isDashboardView && (
+            {currentView === 'dashboard' && isDashboardView && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
               {/* Stat Card 1: Quota */}
               <div className="bg-white rounded-[2rem] shadow-sm hover:shadow-md transition-shadow border border-slate-200 p-6 sm:p-8 relative overflow-hidden group">
@@ -616,12 +781,12 @@ export default function App() {
                 </div>
                 <div className="flex items-baseline gap-2 mb-3 relative z-10">
                   <span className="text-4xl font-black text-slate-900">{userExtractions}</span>
-                  <span className="text-slate-500 font-medium">/ {user && !user.isAnonymous ? MAX_USER_EXTRACTIONS : MAX_ANON_EXTRACTIONS}</span>
+                  <span className="text-slate-500 font-medium">/ {user && !user.isAnonymous ? maxUserExtractions : maxAnonExtractions}</span>
                 </div>
                 <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden relative z-10">
                   <div 
-                    className={cn("h-full rounded-full transition-all", userExtractions >= (user && !user.isAnonymous ? MAX_USER_EXTRACTIONS : MAX_ANON_EXTRACTIONS) ? "bg-red-500" : "bg-gradient-to-r from-indigo-500 to-purple-500")}
-                    style={{ width: `${Math.min((userExtractions / (user && !user.isAnonymous ? MAX_USER_EXTRACTIONS : MAX_ANON_EXTRACTIONS)) * 100, 100)}%` }}
+                    className={cn("h-full rounded-full transition-all", userExtractions >= (user && !user.isAnonymous ? maxUserExtractions : maxAnonExtractions) ? "bg-red-500" : "bg-gradient-to-r from-indigo-500 to-purple-500")}
+                    style={{ width: `${Math.min((userExtractions / (user && !user.isAnonymous ? maxUserExtractions : maxAnonExtractions)) * 100, 100)}%` }}
                   />
                 </div>
               </div>
@@ -677,7 +842,7 @@ export default function App() {
             )}
 
             {/* Search Form / Hero Section */}
-            {!isDashboardView ? (
+            {currentView === 'dashboard' && !isDashboardView ? (
               <section className="relative overflow-hidden rounded-[2.5rem] bg-slate-900 text-white shadow-2xl border border-slate-800 p-8 sm:p-12 lg:p-16 mb-16">
                 {/* Background Glows */}
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-indigo-500/30 blur-[120px] rounded-full pointer-events-none"></div>
@@ -735,7 +900,7 @@ export default function App() {
                         <button
                           type="submit"
                           aria-label="Lancer l'extraction des liens"
-                          disabled={isLoading || (user?.isAnonymous && userExtractions >= MAX_ANON_EXTRACTIONS) || (!user?.isAnonymous && userExtractions >= MAX_USER_EXTRACTIONS)}
+                          disabled={isLoading || (user?.isAnonymous && userExtractions >= maxAnonExtractions) || (!user?.isAnonymous && userExtractions >= maxUserExtractions)}
                           className="absolute right-2 top-2 bottom-2 px-6 sm:px-8 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg shadow-indigo-900/20"
                         >
                           {isLoading ? (
@@ -792,7 +957,7 @@ export default function App() {
                       />
                       <button
                         type="submit"
-                        disabled={isLoading || userExtractions >= MAX_USER_EXTRACTIONS}
+                        disabled={isLoading || userExtractions >= maxUserExtractions}
                         className="absolute right-2 top-2 bottom-2 px-6 sm:px-8 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2 shadow-md"
                       >
                         {isLoading ? (
@@ -842,7 +1007,7 @@ export default function App() {
             )}
 
             {/* Landing Page Content (Visible when no search active AND not logged in) */}
-            {!pageData && !isLoading && !isDashboardView && (
+            {currentView === 'dashboard' && !pageData && !isLoading && !isDashboardView && (
               <div className="space-y-24 pb-12">
                 {/* Features Section */}
                 <section className="py-12">
@@ -955,7 +1120,7 @@ export default function App() {
                         <UserIcon className="w-6 h-6" />
                         Créer un compte gratuit
                       </button>
-                      <p className="mt-6 text-sm text-indigo-200 font-medium">Jusqu'à {MAX_USER_EXTRACTIONS} analyses gratuites avec un compte.</p>
+                      <p className="mt-6 text-sm text-indigo-200 font-medium">Jusqu'à {maxUserExtractions} analyses gratuites avec un compte.</p>
                     </div>
                   </section>
                 )}
@@ -967,7 +1132,8 @@ export default function App() {
 
 
         {/* Results Area */}
-        <AnimatePresence mode="wait">
+        {currentView === 'dashboard' && (
+          <AnimatePresence mode="wait">
           {pageData && (
             <motion.div
               key="results"
@@ -1221,7 +1387,7 @@ export default function App() {
                         </p>
                       </div>
                     )}
-                    {Object.entries(aiAnalysis.categories).map(([category, links]) => (
+                    {(Object.entries(aiAnalysis.categories) as [string, ExtractedLink[]][]).map(([category, links]) => (
                       <div key={category} className="space-y-3">
                         <h4 className="font-medium text-slate-700 flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
@@ -1253,6 +1419,60 @@ export default function App() {
             </motion.div>
           )}
         </AnimatePresence>
+        )}
+
+        {/* History View */}
+        {currentView === 'history' && (
+          <HistoryView history={history} isLoading={isLoadingHistory} />
+        )}
+
+        {/* Admin View */}
+        {currentView === 'admin' && isAdmin && (
+          <AdminView 
+            allHistory={allHistory} 
+            allUsers={allUsers} 
+            isLoading={isLoadingAdmin} 
+            maxAnonExtractions={maxAnonExtractions}
+            maxUserExtractions={maxUserExtractions}
+            setMaxAnonExtractions={setMaxAnonExtractions}
+            setMaxUserExtractions={setMaxUserExtractions}
+            emailVerifyApiKey={emailVerifyApiKey}
+            setEmailVerifyApiKey={setEmailVerifyApiKey}
+          />
+        )}
+
+        {/* Mobile Bottom Navigation */}
+        {isDashboardView && (
+          <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 flex justify-around items-center h-16 px-2 pb-safe">
+            <button 
+              onClick={() => setCurrentView('dashboard')}
+              className={cn("flex flex-col items-center justify-center w-full h-full gap-1", currentView === 'dashboard' ? "text-indigo-600" : "text-slate-500")}
+            >
+              <LayoutGrid className="w-5 h-5" />
+              <span className="text-[10px] font-medium">Tableau de bord</span>
+            </button>
+            
+            {user && !user.isAnonymous && (
+              <button 
+                onClick={() => setCurrentView('history')}
+                className={cn("flex flex-col items-center justify-center w-full h-full gap-1", currentView === 'history' ? "text-indigo-600" : "text-slate-500")}
+              >
+                <History className="w-5 h-5" />
+                <span className="text-[10px] font-medium">Historique</span>
+              </button>
+            )}
+
+            {isAdmin && (
+              <button 
+                onClick={() => setCurrentView('admin')}
+                className={cn("flex flex-col items-center justify-center w-full h-full gap-1", currentView === 'admin' ? "text-purple-600" : "text-slate-500")}
+              >
+                <ShieldAlert className="w-5 h-5" />
+                <span className="text-[10px] font-medium">Admin</span>
+              </button>
+            )}
+          </nav>
+        )}
 
         {/* Quota Modal */}
         <AnimatePresence>
@@ -1270,7 +1490,7 @@ export default function App() {
                 <div className="text-center space-y-2">
                   <h3 className="text-xl font-semibold text-slate-900">Limite atteinte</h3>
                   <p className="text-slate-500">
-                    Vous avez atteint la limite de {MAX_ANON_EXTRACTIONS} extractions gratuites. Connectez-vous avec votre compte Google pour continuer à utiliser l'outil (jusqu'à {MAX_USER_EXTRACTIONS} extractions).
+                    Vous avez atteint la limite de {maxAnonExtractions} extractions gratuites. Connectez-vous avec votre compte Google pour continuer à utiliser l'outil (jusqu'à {maxUserExtractions} extractions).
                   </p>
                 </div>
                 <div className="flex flex-col gap-3">

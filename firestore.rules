@@ -19,6 +19,13 @@ service cloud.firestore {
       return request.auth != null;
     }
     
+    function isAdmin() {
+      return isAuthenticated() && (
+        (request.auth.token.email == "gnzikoune@gmail.com" && request.auth.token.email_verified == true) ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      );
+    }
+
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
@@ -28,12 +35,22 @@ service cloud.firestore {
     }
 
     function isValidUser(data) {
-      return hasOnlyAllowedFields(['email', 'extractionCount', 'lastActive']) &&
+      return hasOnlyAllowedFields(['email', 'extractionCount', 'lastActive', 'role', 'emailStatus']) &&
              (!('email' in data) || data.email is string) &&
              data.extractionCount is number &&
              data.extractionCount >= 0 &&
-             data.extractionCount <= 20 &&
-             (!('lastActive' in data) || data.lastActive is string);
+             (!('lastActive' in data) || data.lastActive is string) &&
+             (!('emailStatus' in data) || data.emailStatus in ['ok', 'invalid']) &&
+             (!('role' in data) || data.role in ['admin', 'user']);
+    }
+
+    function isValidSettings(data) {
+      return hasOnlyAllowedFields(['maxAnonExtractions', 'maxUserExtractions', 'geminiApiKey', 'emailVerifyApiKey', 'updatedAt']) &&
+             data.maxAnonExtractions is number && data.maxAnonExtractions >= 0 &&
+             data.maxUserExtractions is number && data.maxUserExtractions >= 0 &&
+             (!('geminiApiKey' in data) || data.geminiApiKey is string) &&
+             (!('emailVerifyApiKey' in data) || data.emailVerifyApiKey is string) &&
+             (!('updatedAt' in data) || data.updatedAt is string);
     }
 
     function isValidExtraction(data) {
@@ -47,9 +64,10 @@ service cloud.firestore {
     }
 
     function isValidAnalysis(data) {
-      return hasOnlyAllowedFields(['url', 'userId', 'createdAt', 'scanType', 'raw', 'metrics', 'ai']) &&
+      return hasOnlyAllowedFields(['url', 'userId', 'isAnonymous', 'createdAt', 'scanType', 'raw', 'metrics', 'ai']) &&
              data.url is string && data.url.size() < 2000 &&
              data.userId is string && data.userId == request.auth.uid &&
+             (!('isAnonymous' in data) || data.isAnonymous is bool) &&
              data.createdAt is string &&
              data.scanType is string &&
              data.raw is map &&
@@ -58,35 +76,44 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      // Users can only read their own data
-      allow read: if isOwner(userId);
+      // Users can only read their own data, admins can read all
+      allow read: if isOwner(userId) || isAdmin();
       
       // Users can create their own profile, starting with 0 extractions
       allow create: if isOwner(userId) && 
                     isValidUser(request.resource.data) &&
-                    request.resource.data.extractionCount == 0;
+                    request.resource.data.extractionCount == 0 &&
+                    (!('role' in request.resource.data) || request.resource.data.role == 'user' || isAdmin());
                     
       // Users can update their own profile, but only increment extractionCount by 1
-      allow update: if isOwner(userId) && 
+      allow update: if (isOwner(userId) && 
                     isValidUser(request.resource.data) &&
                     (!('email' in request.resource.data) || !('email' in resource.data) || request.resource.data.email == resource.data.email) &&
                     (request.resource.data.extractionCount == resource.data.extractionCount || 
-                     request.resource.data.extractionCount == resource.data.extractionCount + 1);
+                     request.resource.data.extractionCount == resource.data.extractionCount + 1) &&
+                    (!('role' in request.resource.data) || request.resource.data.role == resource.data.role)) ||
+                    (isAdmin() && isValidUser(request.resource.data));
 
       match /extractions/{extractionId} {
-        allow read: if isOwner(userId);
+        allow read: if isOwner(userId) || isAdmin();
         allow create: if isOwner(userId) && isValidExtraction(request.resource.data);
-        allow update, delete: if false; // Extractions are immutable
+        allow update, delete: if isAdmin();
       }
     }
 
     match /analyses/{analysisId} {
       allow create: if isAuthenticated() && isValidAnalysis(request.resource.data);
-      allow update: if isAuthenticated() && 
+      allow update: if (isAuthenticated() && 
                     resource.data.userId == request.auth.uid &&
                     isValidAnalysis(request.resource.data) &&
-                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ai']);
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ai'])) ||
+                    (isAdmin() && isValidAnalysis(request.resource.data));
+      allow read: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
+    }
+
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidSettings(request.resource.data);
     }
   }
 }
