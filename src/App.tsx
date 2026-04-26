@@ -172,7 +172,7 @@ export default function App() {
           }
         }
         setUserExtractions(userSnap.data().extractionCount || 0);
-        setIsAdmin(currentUser.email === 'gnzikoune@gmail.com' || userSnap.data().role === 'admin');
+        setIsAdmin(currentUser.email === 'gnzikoune@gmail.com');
       }
     });
 
