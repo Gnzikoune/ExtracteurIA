@@ -14,27 +14,27 @@ export function HistoryView({ history, isLoading }: { history: any[], isLoading:
 
   if (history.length === 0) {
     return (
-      <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
-        <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-4">
-          <Calendar className="w-8 h-8" />
+      <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
+        <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-3">
+          <Calendar className="w-6 h-6" />
         </div>
-        <h3 className="text-xl font-bold text-slate-900 mb-2">Aucun historique</h3>
-        <p className="text-slate-500">Vous n'avez pas encore effectué d'analyse.</p>
+        <h3 className="text-lg font-bold text-slate-900 mb-1">Aucun historique</h3>
+        <p className="text-sm text-slate-500">Vous n'avez pas encore effectué d'analyse.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-slate-900">Historique de vos analyses</h2>
-      <div className="grid gap-4">
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold text-slate-900">Historique de vos analyses</h2>
+      <div className="grid gap-3">
         {history.map((item, index) => (
           <motion.div
             key={item.id}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.05 }}
-            className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center"
+            className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center"
           >
             <div className="space-y-1">
               <div className="flex items-center gap-2">

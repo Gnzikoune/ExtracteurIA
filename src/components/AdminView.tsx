@@ -68,11 +68,11 @@ export function AdminView({
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="p-3 bg-indigo-100 text-indigo-600 rounded-xl">
-          <Settings className="w-6 h-6" />
+      <div className="flex items-center gap-3 mb-4">
+        <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+          <Settings className="w-5 h-5" />
         </div>
-        <h2 className="text-3xl font-bold text-slate-900">Administration</h2>
+        <h2 className="text-xl font-bold text-slate-900">Administration</h2>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -80,10 +80,10 @@ export function AdminView({
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-sm"
+          className="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 shadow-sm"
         >
-          <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
-            <Settings className="w-5 h-5 text-indigo-500" />
+          <h3 className="text-lg font-bold text-slate-900 mb-5 flex items-center gap-2">
+            <Settings className="w-4 h-4 text-indigo-500" />
             Paramètres globaux
           </h3>
           <form onSubmit={handleSaveSettings} className="space-y-6">
@@ -147,9 +147,9 @@ export function AdminView({
             <button 
               type="submit" 
               disabled={isSaving}
-              className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl transition-colors disabled:opacity-70"
+              className="w-full flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors disabled:opacity-70"
             >
-              {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               Sauvegarder les paramètres
             </button>
             
@@ -167,23 +167,23 @@ export function AdminView({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-sm flex flex-col gap-6"
+          className="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 shadow-sm flex flex-col gap-6"
         >
-          <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <Database className="w-5 h-5 text-indigo-500" />
+          <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+            <Database className="w-4 h-4 text-indigo-500" />
             Statistiques globales
           </h3>
           
           <div className="grid grid-cols-2 gap-4">
-            <div className="bg-slate-50 rounded-xl p-5 border border-slate-100 flex flex-col items-center justify-center text-center">
-              <Users className="w-8 h-8 text-indigo-400 mb-2" />
-              <p className="text-3xl font-black text-slate-900">{usersWithEmail.length}</p>
-              <p className="text-sm font-medium text-slate-500">Utilisateurs inscrits</p>
+            <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 flex flex-col items-center justify-center text-center">
+              <Users className="w-6 h-6 text-indigo-400 mb-2" />
+              <p className="text-2xl font-black text-slate-900">{usersWithEmail.length}</p>
+              <p className="text-xs font-medium text-slate-500">Utilisateurs inscrits</p>
             </div>
-            <div className="bg-slate-50 rounded-xl p-5 border border-slate-100 flex flex-col items-center justify-center text-center">
-              <Database className="w-8 h-8 text-purple-400 mb-2" />
-              <p className="text-3xl font-black text-slate-900">{allHistory.length}</p>
-              <p className="text-sm font-medium text-slate-500">Analyses générées</p>
+            <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 flex flex-col items-center justify-center text-center">
+              <Database className="w-6 h-6 text-purple-400 mb-2" />
+              <p className="text-2xl font-black text-slate-900">{allHistory.length}</p>
+              <p className="text-xs font-medium text-slate-500">Analyses générées</p>
             </div>
           </div>
         </motion.div>
@@ -194,11 +194,11 @@ export function AdminView({
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
-        className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
+        className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden"
       >
-        <div className="p-6 border-b border-slate-200 bg-slate-50">
+        <div className="p-5 border-b border-slate-200 bg-slate-50">
           <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-            <Users className="w-5 h-5 text-indigo-500" />
+            <Users className="w-4 h-4 text-indigo-500" />
             Liste des utilisateurs
           </h3>
         </div>
@@ -241,11 +241,11 @@ export function AdminView({
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
-        className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
+        className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden"
       >
-        <div className="p-6 border-b border-slate-200 bg-slate-50">
+        <div className="p-5 border-b border-slate-200 bg-slate-50">
           <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-            <History className="w-5 h-5 text-indigo-500" />
+            <History className="w-4 h-4 text-indigo-500" />
             Historique complet des analyses
           </h3>
         </div>
