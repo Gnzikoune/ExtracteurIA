@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Loader2, Settings, Users, Database, Save, CheckCircle2, History } from 'lucide-react';
+import { Loader2, Settings, Users, Database, Save, CheckCircle2, History, Sparkles } from 'lucide-react';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -13,7 +13,10 @@ export function AdminView({
   setMaxAnonExtractions, 
   setMaxUserExtractions,
   emailVerifyApiKey,
-  setEmailVerifyApiKey
+  setEmailVerifyApiKey,
+  geminiApiKey,
+  setGeminiApiKey,
+  onScore
 }: { 
   allHistory: any[], 
   allUsers: any[], 
@@ -23,12 +26,21 @@ export function AdminView({
   setMaxAnonExtractions: (val: number) => void,
   setMaxUserExtractions: (val: number) => void,
   emailVerifyApiKey: string | null,
-  setEmailVerifyApiKey: (val: string | null) => void
+  setEmailVerifyApiKey: (val: string | null) => void,
+  geminiApiKey: string | null,
+  setGeminiApiKey: (val: string | null) => void,
+  onScore: (item: any) => void
 }) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [emailApiKey, setEmailApiKey] = useState('');
+
+  // Synchronize local state with props when they are loaded from Firestore
+  React.useEffect(() => {
+    if (geminiApiKey) setApiKey(geminiApiKey);
+    if (emailVerifyApiKey) setEmailApiKey(emailVerifyApiKey);
+  }, [geminiApiKey, emailVerifyApiKey]);
 
   // Only show users with an email address
   const usersWithEmail = allUsers.filter(u => u.email && u.email !== 'Anonyme');
@@ -47,6 +59,11 @@ export function AdminView({
       if (emailApiKey) dataToSave.emailVerifyApiKey = emailApiKey;
       
       await setDoc(doc(db, 'settings', 'global'), dataToSave, { merge: true });
+      
+      // Update global state
+      if (apiKey) setGeminiApiKey(apiKey);
+      if (emailApiKey) setEmailVerifyApiKey(emailApiKey);
+      
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error) {
@@ -123,8 +140,14 @@ export function AdminView({
                   placeholder="Laisser vide pour ne pas modifier"
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none font-mono text-sm"
                 />
-                <p className="text-xs text-slate-500 mt-1">
-                  Si définie, cette clé sera utilisée à la place de la clé d'environnement.
+                <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                  {geminiApiKey ? (
+                    <span className="text-emerald-600 flex items-center gap-0.5">
+                      <CheckCircle2 className="w-3 h-3" /> Configuré
+                    </span>
+                  ) : (
+                    "Si définie, cette clé sera utilisée à la place de la clé d'environnement."
+                  )}
                 </p>
               </div>
               <div>
@@ -138,8 +161,14 @@ export function AdminView({
                   placeholder="Laisser vide pour ne pas modifier"
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none font-mono text-sm"
                 />
-                <p className="text-xs text-slate-500 mt-1">
-                  Utilisée pour vérifier la validité des adresses email à l'inscription.
+                <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                  {emailVerifyApiKey ? (
+                    <span className="text-emerald-600 flex items-center gap-0.5">
+                      <CheckCircle2 className="w-3 h-3" /> Configuré
+                    </span>
+                  ) : (
+                    "Utilisée pour vérifier la validité des adresses email à l'inscription."
+                  )}
                 </p>
               </div>
             </div>
@@ -270,9 +299,19 @@ export function AdminView({
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`font-bold ${h.ai?.scoreGlobal >= 70 ? 'text-emerald-600' : h.ai?.scoreGlobal >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
-                      {h.ai?.scoreGlobal || 'N/A'}
-                    </span>
+                    {h.ai?.scoreGlobal !== undefined ? (
+                      <span className={`font-bold ${h.ai.scoreGlobal >= 70 ? 'text-emerald-600' : h.ai.scoreGlobal >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
+                        {h.ai.scoreGlobal}
+                      </span>
+                    ) : (
+                      <button 
+                        onClick={() => onScore(h)}
+                        className="text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1"
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        Scorer
+                      </button>
+                    )}
                   </td>
                   <td className="px-6 py-4">{h.ai?.businessType || 'N/A'}</td>
                   <td className="px-6 py-4 whitespace-nowrap">

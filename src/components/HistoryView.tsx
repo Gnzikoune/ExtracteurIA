@@ -1,8 +1,16 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Loader2, ExternalLink, Calendar, Link as LinkIcon } from 'lucide-react';
+import { Loader2, ExternalLink, Calendar, Link as LinkIcon, Sparkles } from 'lucide-react';
 
-export function HistoryView({ history, isLoading }: { history: any[], isLoading: boolean }) {
+export function HistoryView({ 
+  history, 
+  isLoading,
+  onScore
+}: { 
+  history: any[], 
+  isLoading: boolean,
+  onScore: (item: any) => void
+}) {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-slate-500">
@@ -55,12 +63,22 @@ export function HistoryView({ history, isLoading }: { history: any[], isLoading:
             <div className="flex items-center gap-3">
               <div className="text-right">
                 <p className="text-xs text-slate-500 uppercase font-semibold tracking-wider">Score</p>
-                <p className={`text-lg font-bold ${
-                  (item.ai?.scoreGlobal || 0) >= 80 ? 'text-emerald-500' :
-                  (item.ai?.scoreGlobal || 0) >= 50 ? 'text-amber-500' : 'text-red-500'
-                }`}>
-                  {item.ai?.scoreGlobal || 'N/A'}/100
-                </p>
+                {item.ai?.scoreGlobal !== undefined ? (
+                  <p className={`text-lg font-bold ${
+                    (item.ai?.scoreGlobal || 0) >= 80 ? 'text-emerald-500' :
+                    (item.ai?.scoreGlobal || 0) >= 50 ? 'text-amber-500' : 'text-red-500'
+                  }`}>
+                    {item.ai.scoreGlobal}/100
+                  </p>
+                ) : (
+                  <button
+                    onClick={() => onScore(item)}
+                    className="flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg text-sm font-bold border border-indigo-100 transition-all hover:scale-105"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Analyser
+                  </button>
+                )}
               </div>
               <div className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-sm font-medium border border-slate-200">
                 {item.ai?.businessType || 'N/A'}

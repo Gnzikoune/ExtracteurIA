@@ -453,8 +453,12 @@ export default function App() {
     }
   };
 
-  const handleAnalyze = async () => {
-    if (!pageData || pageData.links.length === 0) return;
+  const handleAnalyze = async (manualData?: { url: string, pageData: PageData, analysisId: string }) => {
+    const activeUrl = manualData?.url || url;
+    const activePageData = manualData?.pageData || pageData;
+    const activeAnalysisId = manualData?.analysisId || currentAnalysisId;
+
+    if (!activePageData || activePageData.links.length === 0) return;
 
     setIsAnalyzing(true);
     setAiError(null);
@@ -469,13 +473,13 @@ export default function App() {
       
       const prompt = `
         Analyze the following webpage and its extracted links to provide a business conversion diagnostic.
-        URL: ${url}
-        Title: ${pageData.title}
-        Description: ${pageData.description}
+        URL: ${activeUrl}
+        Title: ${activePageData.title}
+        Description: ${activePageData.description}
         
-        Total Links: ${pageData.links.length}
+        Total Links: ${activePageData.links.length}
         Links Data:
-        ${JSON.stringify(pageData.links.slice(0, 800).map((l, index) => ({ id: index, text: l.text, href: l.href })))}
+        ${JSON.stringify(activePageData.links.slice(0, 800).map((l, index) => ({ id: index, text: l.text, href: l.href })))}
         
         Please provide a comprehensive business diagnostic of this webpage based on its metadata and links:
         
@@ -486,7 +490,7 @@ export default function App() {
         5. "opportunities": Provide 2 to 4 concrete, actionable improvements. (IN FRENCH)
         6. "business_type": Guess the type of business (e.g., "restaurant", "e-commerce", "blog", "agence", "inconnu"). (IN FRENCH)
         7. "categories": Categorize ALL the provided links into meaningful groups (e.g., "Navigation du site", "Réseaux Sociaux", "Articles", "Ressources Externes", etc.). 
-           IMPORTANT: To save space, return the "id" of each link in the corresponding category array. EVERY single link id from 0 to ${Math.min(pageData.links.length, 800) - 1} MUST be placed in exactly one category. (IN FRENCH)
+           IMPORTANT: To save space, return the "id" of each link in the corresponding category array. EVERY single link id from 0 to ${Math.min(activePageData.links.length, 800) - 1} MUST be placed in exactly one category. (IN FRENCH)
         
         Return the response strictly as a JSON object with this structure:
         {
@@ -531,7 +535,7 @@ export default function App() {
         const categories: Record<string, ExtractedLink[]> = {};
         for (const [category, linkIds] of Object.entries(parsed.categories)) {
           categories[category] = (linkIds as number[])
-            .map(id => pageData.links[id])
+            .map(id => activePageData.links[id])
             .filter(Boolean); // Filter out any undefined in case AI hallucinates an ID
         }
         
@@ -548,7 +552,7 @@ export default function App() {
         setAiAnalysis(aiResult);
 
         // Update the global analysis document
-        if (currentAnalysisId && user) {
+        if (activeAnalysisId && user) {
           try {
             // We only save the categories keys and counts to avoid duplicating the links array
             const categoriesSummary: Record<string, number> = {};
@@ -556,7 +560,7 @@ export default function App() {
               categoriesSummary[cat] = catLinks.length;
             }
 
-            await setDoc(doc(db, 'analyses', currentAnalysisId), {
+            await setDoc(doc(db, 'analyses', activeAnalysisId), {
               ai: {
                 scoreGlobal: aiResult.score_global,
                 mainMessage: aiResult.main_message,
@@ -580,6 +584,29 @@ export default function App() {
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  const handleScoreFromHistory = (item: any) => {
+    const manualData = {
+      url: item.url,
+      pageData: {
+        title: item.raw.title,
+        description: item.raw.description,
+        links: item.raw.links,
+        pagesCrawled: item.raw.pagesCrawled
+      },
+      analysisId: item.id
+    };
+    
+    // Set states to display correctly on dashboard
+    setUrl(manualData.url);
+    setPageData(manualData.pageData);
+    setCurrentAnalysisId(manualData.analysisId);
+    setAiAnalysis(null);
+    setCurrentView('dashboard');
+    
+    // Trigger analysis
+    handleAnalyze(manualData);
   };
 
   const handleExportJSON = () => {
@@ -1419,7 +1446,11 @@ export default function App() {
 
         {/* History View */}
         {currentView === 'history' && (
-          <HistoryView history={history} isLoading={isLoadingHistory} />
+          <HistoryView 
+            history={history} 
+            isLoading={isLoadingHistory} 
+            onScore={handleScoreFromHistory}
+          />
         )}
 
         {/* Admin View */}
@@ -1434,6 +1465,9 @@ export default function App() {
             setMaxUserExtractions={setMaxUserExtractions}
             emailVerifyApiKey={emailVerifyApiKey}
             setEmailVerifyApiKey={setEmailVerifyApiKey}
+            geminiApiKey={geminiApiKey}
+            setGeminiApiKey={setGeminiApiKey}
+            onScore={handleScoreFromHistory}
           />
         )}
 
