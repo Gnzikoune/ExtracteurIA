@@ -10,6 +10,7 @@ import { doc, getDoc, setDoc, onSnapshot, collection, addDoc, query, orderBy, ge
 
 import { HistoryView } from './components/HistoryView';
 import { AdminView } from './components/AdminView';
+import { Analytics } from "@vercel/analytics/next"
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
