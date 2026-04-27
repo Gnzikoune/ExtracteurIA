@@ -100,15 +100,23 @@ export default function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (!currentUser) {
-        setUser(null);
-        setIsAuthReady(false);
-        try {
-          await signInAnonymously(auth);
-        } catch (error: any) {
-          console.error("Erreur d'authentification anonyme:", error);
-          if (error.code === 'auth/operation-not-allowed') {
-            setError("Veuillez activer l'authentification anonyme dans la console Firebase.");
+      if (!currentUser || currentUser.isAnonymous) {
+        setUser(currentUser);
+        setIsAuthReady(!!currentUser);
+        setIsAdmin(false);
+        setHistory([]);
+        setAllHistory([]);
+        setAllUsers([]);
+        setCurrentView('dashboard');
+
+        if (!currentUser) {
+          try {
+            await signInAnonymously(auth);
+          } catch (error: any) {
+            console.error("Erreur d'authentification anonyme:", error);
+            if (error.code === 'auth/operation-not-allowed') {
+              setError("Veuillez activer l'authentification anonyme dans la console Firebase.");
+            }
           }
         }
         return;
@@ -250,6 +258,10 @@ export default function App() {
       setPageData(null);
       setAiAnalysis(null);
       setUrl('');
+      setHistory([]);
+      setAllHistory([]);
+      setAllUsers([]);
+      setCurrentView('dashboard');
     } catch (err: any) {
       console.error("Logout error:", err);
     }
@@ -469,6 +481,9 @@ export default function App() {
         throw new Error('La clé API Gemini n\'est pas configurée');
       }
 
+      // DEBUG: Afficher les 4 premiers caractères de la clé utilisée
+      console.log(`Utilisation de la clé API Gemini: ${apiKey.substring(0, 4)}...`);
+
       const ai = new GoogleGenAI({ apiKey });
       
       const prompt = `
@@ -524,7 +539,6 @@ export default function App() {
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
-          tools: [{ googleSearch: {} }],
         },
       });
 
@@ -580,7 +594,28 @@ export default function App() {
       }
     } catch (err: any) {
       console.error('AI Analysis error:', err);
-      setAiError(err.message || 'Échec de l\'analyse avec Gemini');
+      
+      let friendlyMessage = "Échec de l'analyse avec l'IA.";
+      const errorStr = err.toString();
+      const message = err.message || "";
+
+      if (message.includes('503') || errorStr.includes('503')) {
+        friendlyMessage = "⚠️ Le service est actuellement surchargé (High Demand). Google limite temporairement les accès. Veuillez réessayer dans 30 secondes.";
+      } else if (message.includes('429') || errorStr.includes('429')) {
+        friendlyMessage = isAdmin 
+          ? "🚫 Quota épuisé ou trop de requêtes. Vérifiez vos limites dans Google AI Studio ou patientez une minute."
+          : "🚫 Le service est très sollicité et a atteint sa limite temporaire. Veuillez réessayer dans quelques minutes.";
+      } else if (message.includes('400') || errorStr.includes('400')) {
+        friendlyMessage = "❌ Requête invalide. La page est peut-être trop complexe pour l'analyse automatique.";
+      } else if (message.includes('API key') || errorStr.includes('API key')) {
+        friendlyMessage = isAdmin
+          ? "🔑 Problème de clé API. Veuillez vérifier la clé Gemini dans l'onglet Administration."
+          : "🔑 Service temporairement indisponible (Configuration). L'administrateur doit mettre à jour la clé API.";
+      } else {
+        friendlyMessage = message || friendlyMessage;
+      }
+
+      setAiError(friendlyMessage);
     } finally {
       setIsAnalyzing(false);
     }

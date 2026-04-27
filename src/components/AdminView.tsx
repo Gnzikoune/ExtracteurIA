@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Loader2, Settings, Users, Database, Save, CheckCircle2, History, Sparkles } from 'lucide-react';
+import { Loader2, Settings, Users, Database, Save, CheckCircle2, History, Sparkles, Eye, EyeOff } from 'lucide-react';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -35,6 +35,8 @@ export function AdminView({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [emailApiKey, setEmailApiKey] = useState('');
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [showEmailKey, setShowEmailKey] = useState(false);
 
   // Synchronize local state with props when they are loaded from Firestore
   React.useEffect(() => {
@@ -133,13 +135,22 @@ export function AdminView({
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Clé API Gemini (Optionnel)
                 </label>
-                <input 
-                  type="password" 
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="Laisser vide pour ne pas modifier"
-                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none font-mono text-sm"
-                />
+                <div className="relative">
+                  <input 
+                    type={showGeminiKey ? "text" : "password"} 
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="Laisser vide pour ne pas modifier"
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none font-mono text-sm pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowGeminiKey(!showGeminiKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
                 <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
                   {geminiApiKey ? (
                     <span className="text-emerald-600 flex items-center gap-0.5">
@@ -154,13 +165,22 @@ export function AdminView({
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Clé API EmailListVerify (Optionnel)
                 </label>
-                <input 
-                  type="password" 
-                  value={emailApiKey}
-                  onChange={(e) => setEmailApiKey(e.target.value)}
-                  placeholder="Laisser vide pour ne pas modifier"
-                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none font-mono text-sm"
-                />
+                <div className="relative">
+                  <input 
+                    type={showEmailKey ? "text" : "password"} 
+                    value={emailApiKey}
+                    onChange={(e) => setEmailApiKey(e.target.value)}
+                    placeholder="Laisser vide pour ne pas modifier"
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none font-mono text-sm pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEmailKey(!showEmailKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showEmailKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
                 <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
                   {emailVerifyApiKey ? (
                     <span className="text-emerald-600 flex items-center gap-0.5">
