@@ -60,6 +60,8 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [deepScan, setDeepScan] = useState(false);
   const [showQuotaModal, setShowQuotaModal] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [persistentId, setPersistentId] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<'dashboard' | 'history' | 'admin'>('dashboard');
 
   // Auth & Usage State
@@ -99,35 +101,73 @@ export default function App() {
   }, [user]);
 
   useEffect(() => {
+    // Initialize or retrieve persistent device ID
+    let pid = localStorage.getItem('extia_pid');
+    if (!pid) {
+      pid = 'pid_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('extia_pid', pid);
+    }
+    setPersistentId(pid);
+  }, []);
+
+  useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (!currentUser || currentUser.isAnonymous) {
-        setUser(currentUser);
-        setIsAuthReady(!!currentUser);
-        setIsAdmin(false);
+      if (!currentUser) {
         setHistory([]);
         setAllHistory([]);
         setAllUsers([]);
         setCurrentView('dashboard');
-
-        if (!currentUser) {
-          try {
-            await signInAnonymously(auth);
-          } catch (error: any) {
-            console.error("Erreur d'authentification anonyme:", error);
-            if (error.code === 'auth/operation-not-allowed') {
-              setError("Veuillez activer l'authentification anonyme dans la console Firebase.");
-            }
+        
+        try {
+          await signInAnonymously(auth);
+        } catch (error: any) {
+          console.error("Erreur d'authentification anonyme:", error);
+          if (error.code === 'auth/operation-not-allowed') {
+            setError("Veuillez activer l'authentification anonyme dans la console Firebase.");
           }
         }
         return;
+      }
+
+      // Clear UI data for anonymous users to maintain privacy as requested
+      if (currentUser.isAnonymous) {
+        setHistory([]);
+        setAllHistory([]);
+        setAllUsers([]);
+        // We don't reset currentView here to avoid jumping back while the user is looking at results
       }
 
       setUser(currentUser);
       setIsAuthReady(true);
       
       // Fetch or create user document
-      const userRef = doc(db, 'users', currentUser.uid);
-      let userSnap;
+    const userRef = doc(db, 'users', currentUser.uid);
+    
+    // If anonymous, we might want to check if we should link this session to a persistent record
+    const pid = localStorage.getItem('extia_pid');
+    if (currentUser.isAnonymous && pid) {
+      // Sync persistent usage count if needed
+      const pidRef = doc(db, 'anonymous_usage', pid);
+      try {
+        const pidSnap = await getDoc(pidRef);
+        if (pidSnap.exists()) {
+          const pidData = pidSnap.data();
+          // Initialize user with persistent data
+          await setDoc(userRef, {
+            extractionCount: pidData.count || 0,
+            lastActive: new Date().toISOString(),
+            persistentId: persistentId,
+            email: 'Anonyme',
+            role: 'user'
+          }, { merge: true });
+          setUserExtractions(pidData.count || 0);
+        }
+      } catch (e) {
+        console.error("Failed to sync persistent usage", e);
+      }
+    }
+
+    let userSnap;
       
       try {
         userSnap = await getDoc(userRef);
@@ -449,6 +489,16 @@ export default function App() {
             email: user.email || 'Anonyme',
             lastActive: new Date().toISOString()
           }, { merge: true });
+
+          // Also update persistent storage for anonymous users
+          if (user.isAnonymous && persistentId) {
+            await setDoc(doc(db, 'anonymous_usage', persistentId), {
+              count: newCount,
+              lastActive: new Date().toISOString()
+            }, { merge: true });
+          }
+
+          setUserExtractions(newCount);
 
           // Save extraction history
           await addDoc(collection(db, 'users', user.uid, 'extractions'), {
@@ -1066,16 +1116,33 @@ export default function App() {
                     )}
                     
                     <div className="flex items-center gap-3 text-sm text-slate-600 mt-2">
-                      <input 
-                        type="checkbox" 
-                        id="deepScanDash" 
-                        checked={deepScan} 
-                        onChange={(e) => setDeepScan(e.target.checked)}
-                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
-                      />
-                      <label htmlFor="deepScanDash" className="cursor-pointer select-none hover:text-slate-900 transition-colors">
-                        Exploration approfondie (Scanner jusqu'à 15 pages du site)
-                      </label>
+                      <div className="flex items-center gap-2">
+                        <input 
+                          type="checkbox" 
+                          id="deepScanDash" 
+                          checked={!user?.isAnonymous && deepScan} 
+                          disabled={user?.isAnonymous}
+                          onChange={(e) => setDeepScan(e.target.checked)}
+                          className={cn(
+                            "w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 transition-all",
+                            user?.isAnonymous && "opacity-50 cursor-not-allowed"
+                          )}
+                        />
+                        <label 
+                          htmlFor="deepScanDash" 
+                          className={cn(
+                            "cursor-pointer select-none transition-colors flex items-center gap-2",
+                            user?.isAnonymous ? "text-slate-400 cursor-not-allowed" : "hover:text-slate-900"
+                          )}
+                        >
+                          Exploration approfondie (Scanner jusqu'à 15 pages du site)
+                          {user?.isAnonymous && (
+                            <span className="text-[10px] font-bold bg-amber-50 text-amber-600 border border-amber-100 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                              Connexion requise
+                            </span>
+                          )}
+                        </label>
+                      </div>
                     </div>
                   </form>
                   {error && (
@@ -1274,28 +1341,48 @@ export default function App() {
                       </button>
                     </div>
                   )}
-                  <button
-                    onClick={handleAnalyze}
-                    disabled={isAnalyzing || !!aiAnalysis || pageData.links.length === 0}
-                    className="shrink-0 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-sm font-semibold rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:translate-y-0 flex items-center gap-2"
-                  >
-                    {isAnalyzing ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Analyse...</span>
-                      </>
-                    ) : aiAnalysis ? (
-                      <>
-                        <Sparkles className="w-4 h-4" />
-                        <span>Terminé</span>
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-4 h-4" />
-                        <span>Diagnostic complet</span>
-                      </>
+                  <div className="flex flex-col items-end gap-1.5">
+                    <button
+                      onClick={() => {
+                        if (user?.isAnonymous) {
+                          setShowLoginModal(true);
+                        } else {
+                          handleAnalyze();
+                        }
+                      }}
+                      disabled={isAnalyzing || (!!aiAnalysis && !user?.isAnonymous) || pageData.links.length === 0}
+                      className={cn(
+                        "shrink-0 px-5 py-2.5 text-white text-sm font-semibold rounded-xl shadow-md transition-all flex items-center gap-2",
+                        user?.isAnonymous 
+                          ? "bg-slate-400 hover:bg-slate-500 shadow-slate-200" 
+                          : "bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 hover:shadow-lg hover:-translate-y-0.5",
+                        (isAnalyzing || (!!aiAnalysis && !user?.isAnonymous) || pageData.links.length === 0) && "opacity-70 cursor-not-allowed hover:translate-y-0"
+                      )}
+                    >
+                      {isAnalyzing ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Analyse...</span>
+                        </>
+                      ) : (aiAnalysis && !user?.isAnonymous) ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Terminé</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4" />
+                          <span>Diagnostic complet</span>
+                        </>
+                      )}
+                    </button>
+                    {user?.isAnonymous && (
+                      <span className="text-[10px] text-amber-600 font-medium flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">
+                        <AlertCircle className="w-3 h-3" />
+                        Connectez-vous pour utiliser l'IA
+                      </span>
                     )}
-                  </button>
+                  </div>
                 </div>
               </div>
 
@@ -1571,40 +1658,93 @@ export default function App() {
           </nav>
         )}
 
-        {/* Quota Modal */}
+        {/* Quota Reached Modal */}
         <AnimatePresence>
           {showQuotaModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
               <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-6"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowQuotaModal(false)}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="relative bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full text-center"
               >
-                <div className="flex items-center justify-center w-12 h-12 bg-indigo-100 text-indigo-600 rounded-full mx-auto">
-                  <AlertCircle className="w-6 h-6" />
+                <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <AlertCircle className="w-8 h-8" />
                 </div>
-                <div className="text-center space-y-2">
-                  <h3 className="text-xl font-semibold text-slate-900">Limite atteinte</h3>
-                  <p className="text-slate-500">
-                    Vous avez atteint la limite de {maxAnonExtractions} extractions gratuites. Connectez-vous avec votre compte Google pour continuer à utiliser l'outil (jusqu'à {maxUserExtractions} extractions).
-                  </p>
-                </div>
+                <h3 className="text-2xl font-bold text-slate-900 mb-3">Limite atteinte</h3>
+                <p className="text-slate-600 mb-8 leading-relaxed">
+                  Vous avez atteint la limite de {maxAnonExtractions} extractions gratuites. 
+                  Connectez-vous avec votre compte Google pour continuer à utiliser l'outil (jusqu'à {maxUserExtractions} extractions).
+                </p>
                 <div className="flex flex-col gap-3">
                   <button
                     onClick={() => {
                       setShowQuotaModal(false);
                       handleLogin();
                     }}
-                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl transition-colors"
+                    className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-indigo-200"
                   >
                     Se connecter avec Google
                   </button>
                   <button
                     onClick={() => setShowQuotaModal(false)}
-                    className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl transition-colors"
+                    className="w-full py-4 bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold rounded-2xl transition-all"
                   >
                     Plus tard
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Login Required for IA Modal */}
+        <AnimatePresence>
+          {showLoginModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowLoginModal(false)}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="relative bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full text-center"
+              >
+                <div className="w-16 h-16 bg-purple-50 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Sparkles className="w-8 h-8" />
+                </div>
+                <h3 className="text-2xl font-bold text-slate-900 mb-3">Fonctionnalité Premium</h3>
+                <p className="text-slate-600 mb-8 leading-relaxed">
+                  Le diagnostic complet par IA nécessite un compte gratuit. 
+                  Connectez-vous pour analyser la pertinence, les problèmes et les opportunités de ce site.
+                </p>
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={() => {
+                      setShowLoginModal(false);
+                      handleLogin();
+                    }}
+                    className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-indigo-200"
+                  >
+                    Se connecter gratuitement
+                  </button>
+                  <button
+                    onClick={() => setShowLoginModal(false)}
+                    className="w-full py-4 bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold rounded-2xl transition-all"
+                  >
+                    Continuer sans l'IA
                   </button>
                 </div>
               </motion.div>

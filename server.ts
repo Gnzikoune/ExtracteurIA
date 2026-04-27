@@ -192,7 +192,24 @@ async function startServer() {
       res.json({ title: pageTitle, description: pageDescription, links, pagesCrawled });
     } catch (error: any) {
       console.error("Extraction error:", error);
-      res.status(500).json({ error: error.message || "Échec de l'extraction des liens" });
+      
+      let friendlyMessage = "Échec de l'extraction des liens";
+      const errorStr = error.toString();
+      const code = error.code || (error.cause && error.cause.code);
+
+      if (errorStr.includes('Timeout') || code === 'UND_ERR_CONNECT_TIMEOUT') {
+        friendlyMessage = "Le site met trop de temps à répondre ou est inaccessible (Timeout).";
+      } else if (code === 'ENOTFOUND') {
+        friendlyMessage = "L'adresse du site est introuvable. Vérifiez l'orthographe de l'URL.";
+      } else if (code === 'ECONNREFUSED') {
+        friendlyMessage = "La connexion a été refusée par le site. Il bloque peut-être les robots.";
+      } else if (errorStr.includes('fetch failed')) {
+        friendlyMessage = "Impossible de se connecter au site. Il est peut-être hors-ligne ou protégé.";
+      } else {
+        friendlyMessage = error.message || friendlyMessage;
+      }
+
+      res.status(500).json({ error: friendlyMessage });
     }
   });
 

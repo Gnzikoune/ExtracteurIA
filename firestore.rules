@@ -34,7 +34,7 @@ service cloud.firestore {
     }
 
     function isValidUser(data) {
-      return hasOnlyAllowedFields(['email', 'extractionCount', 'lastActive', 'role', 'emailStatus']) &&
+      return hasOnlyAllowedFields(['email', 'extractionCount', 'lastActive', 'role', 'emailStatus', 'persistentId']) &&
              (!('email' in data) || data.email is string) &&
              data.extractionCount is number &&
              data.extractionCount >= 0 &&
@@ -78,10 +78,13 @@ service cloud.firestore {
       // Users can only read their own data, admins can read all
       allow read: if isOwner(userId) || isAdmin();
       
-      // Users can create their own profile, starting with 0 extractions
+      // Users can create their own profile
       allow create: if isOwner(userId) && 
                     isValidUser(request.resource.data) &&
-                    request.resource.data.extractionCount == 0 &&
+                    (
+                      request.resource.data.extractionCount == 0 || 
+                      (request.auth.token.firebase.sign_in_provider == 'anonymous' && request.resource.data.extractionCount <= 2)
+                    ) &&
                     (!('role' in request.resource.data) || request.resource.data.role == 'user' || isAdmin());
                     
       // Users can update their own profile, but only increment extractionCount by 1
@@ -113,6 +116,16 @@ service cloud.firestore {
     match /settings/{docId} {
       allow read: if true;
       allow write: if isAdmin() && isValidSettings(request.resource.data);
+    }
+
+    // Persistent tracking for anonymous devices
+    match /anonymous_usage/{pid} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && 
+                    request.resource.data.count <= 2;
+      allow update: if isAuthenticated() && 
+                    request.resource.data.count <= 2 &&
+                    request.resource.data.count >= resource.data.count;
     }
   }
 }
