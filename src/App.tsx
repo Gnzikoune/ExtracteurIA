@@ -6,7 +6,7 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User, signInAnonymously } from 'firebase/auth';
-import { doc, getDoc, setDoc, onSnapshot, collection, addDoc, query, orderBy, getDocs, limit, where } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, collection, addDoc, query, orderBy, getDocs, limit, where, writeBatch } from 'firebase/firestore';
 
 import { HistoryView } from './components/HistoryView';
 import { AdminView } from './components/AdminView';
@@ -676,6 +676,38 @@ export default function App() {
       setAiError(friendlyMessage);
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const handleDeleteHistory = async (ids: string[]) => {
+    try {
+      const batch = writeBatch(db);
+      ids.forEach(id => {
+        batch.delete(doc(db, 'analyses', id));
+      });
+      await batch.commit();
+      
+      // Update local state to avoid waiting for re-fetch
+      setHistory(prev => prev.filter(item => !ids.includes(item.id)));
+      setAllHistory(prev => prev.filter(item => !ids.includes(item.id)));
+    } catch (error) {
+      console.error("Failed to delete history:", error);
+      alert("Erreur lors de la suppression de l'historique.");
+    }
+  };
+
+  const handleDeleteUser = async (ids: string[]) => {
+    try {
+      const batch = writeBatch(db);
+      ids.forEach(id => {
+        batch.delete(doc(db, 'users', id));
+      });
+      await batch.commit();
+      
+      setAllUsers(prev => prev.filter(u => !ids.includes(u.id)));
+    } catch (error) {
+      console.error("Failed to delete user:", error);
+      alert("Erreur lors de la suppression de l'utilisateur.");
     }
   };
 
@@ -1604,6 +1636,7 @@ export default function App() {
             history={history} 
             isLoading={isLoadingHistory} 
             onScore={handleScoreFromHistory}
+            onDelete={handleDeleteHistory}
           />
         )}
 
@@ -1622,6 +1655,8 @@ export default function App() {
             geminiApiKey={geminiApiKey}
             setGeminiApiKey={setGeminiApiKey}
             onScore={handleScoreFromHistory}
+            onDeleteHistory={handleDeleteHistory}
+            onDeleteUser={handleDeleteUser}
           />
         )}
 

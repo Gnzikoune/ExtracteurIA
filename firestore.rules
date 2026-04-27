@@ -96,6 +96,8 @@ service cloud.firestore {
                     (!('role' in request.resource.data) || request.resource.data.role == resource.data.role)) ||
                     (isAdmin() && isValidUser(request.resource.data));
 
+      allow delete: if isAdmin();
+
       match /extractions/{extractionId} {
         allow read: if isOwner(userId) || isAdmin();
         allow create: if isOwner(userId) && isValidExtraction(request.resource.data);
@@ -111,6 +113,7 @@ service cloud.firestore {
                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ai'])) ||
                     (isAdmin() && isValidAnalysis(request.resource.data));
       allow read: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow delete: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
     }
 
     match /settings/{docId} {

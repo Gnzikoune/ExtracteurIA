@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Loader2, Settings, Users, Database, Save, CheckCircle2, History, Sparkles, Eye, EyeOff } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Loader2, Settings, Users, Database, Save, CheckCircle2, History, Sparkles, Eye, EyeOff, Trash2, CheckSquare, Square, AlertCircle, ExternalLink } from 'lucide-react';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -16,20 +16,24 @@ export function AdminView({
   setEmailVerifyApiKey,
   geminiApiKey,
   setGeminiApiKey,
-  onScore
+  onScore,
+  onDeleteHistory,
+  onDeleteUser
 }: { 
   allHistory: any[], 
   allUsers: any[], 
-  isLoading: boolean,
-  maxAnonExtractions: number,
-  maxUserExtractions: number,
-  setMaxAnonExtractions: (val: number) => void,
-  setMaxUserExtractions: (val: number) => void,
-  emailVerifyApiKey: string | null,
-  setEmailVerifyApiKey: (val: string | null) => void,
-  geminiApiKey: string | null,
-  setGeminiApiKey: (val: string | null) => void,
-  onScore: (item: any) => void
+  isLoading: boolean, 
+  maxAnonExtractions: number, 
+  maxUserExtractions: number, 
+  setMaxAnonExtractions: (val: number) => void, 
+  setMaxUserExtractions: (val: number) => void, 
+  emailVerifyApiKey: string | null, 
+  setEmailVerifyApiKey: (val: string | null) => void, 
+  geminiApiKey: string | null, 
+  setGeminiApiKey: (val: string | null) => void, 
+  onScore: (item: any) => void,
+  onDeleteHistory: (ids: string[]) => void,
+  onDeleteUser: (ids: string[]) => void
 }) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -37,6 +41,11 @@ export function AdminView({
   const [emailApiKey, setEmailApiKey] = useState('');
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [showEmailKey, setShowEmailKey] = useState(false);
+  
+  // Selection states
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [selectedHistory, setSelectedHistory] = useState<string[]>([]);
+  const [confirmDelete, setConfirmDelete] = useState<{ type: 'user' | 'history', ids: string[] } | null>(null);
 
   // Synchronize local state with props when they are loaded from Firestore
   React.useEffect(() => {
@@ -76,6 +85,34 @@ export function AdminView({
     }
   };
 
+  const toggleUserSelect = (id: string) => {
+    setSelectedUsers(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+
+  const toggleAllUsers = () => {
+    setSelectedUsers(selectedUsers.length === usersWithEmail.length ? [] : usersWithEmail.map(u => u.id));
+  };
+
+  const toggleHistorySelect = (id: string) => {
+    setSelectedHistory(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+
+  const toggleAllHistory = () => {
+    setSelectedHistory(selectedHistory.length === allHistory.length ? [] : allHistory.map(h => h.id));
+  };
+
+  const executeDelete = () => {
+    if (!confirmDelete) return;
+    if (confirmDelete.type === 'user') {
+      onDeleteUser(confirmDelete.ids);
+      setSelectedUsers(prev => prev.filter(id => !confirmDelete.ids.includes(id)));
+    } else {
+      onDeleteHistory(confirmDelete.ids);
+      setSelectedHistory(prev => prev.filter(id => !confirmDelete.ids.includes(id)));
+    }
+    setConfirmDelete(null);
+  };
+
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-slate-500">
@@ -86,7 +123,7 @@ export function AdminView({
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-12">
       <div className="flex items-center gap-3 mb-4">
         <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
           <Settings className="w-5 h-5" />
@@ -151,15 +188,6 @@ export function AdminView({
                     {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                  {geminiApiKey ? (
-                    <span className="text-emerald-600 flex items-center gap-0.5">
-                      <CheckCircle2 className="w-3 h-3" /> Configuré
-                    </span>
-                  ) : (
-                    "Si définie, cette clé sera utilisée à la place de la clé d'environnement."
-                  )}
-                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -181,15 +209,6 @@ export function AdminView({
                     {showEmailKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                  {emailVerifyApiKey ? (
-                    <span className="text-emerald-600 flex items-center gap-0.5">
-                      <CheckCircle2 className="w-3 h-3" /> Configuré
-                    </span>
-                  ) : (
-                    "Utilisée pour vérifier la validité des adresses email à l'inscription."
-                  )}
-                </p>
               </div>
             </div>
             
@@ -245,25 +264,45 @@ export function AdminView({
         transition={{ delay: 0.2 }}
         className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden"
       >
-        <div className="p-5 border-b border-slate-200 bg-slate-50">
+        <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
           <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
             <Users className="w-4 h-4 text-indigo-500" />
             Liste des utilisateurs
           </h3>
+          {selectedUsers.length > 0 && (
+            <button 
+              onClick={() => setConfirmDelete({ type: 'user', ids: selectedUsers })}
+              className="flex items-center gap-2 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-bold border border-red-100 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Supprimer ({selectedUsers.length})
+            </button>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm text-slate-600">
             <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
               <tr>
+                <th className="px-4 py-4 w-10">
+                  <button onClick={toggleAllUsers} className="text-slate-400 hover:text-indigo-600">
+                    {selectedUsers.length === usersWithEmail.length && usersWithEmail.length > 0 ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                  </button>
+                </th>
                 <th className="px-6 py-4">Email</th>
                 <th className="px-6 py-4">Rôle</th>
                 <th className="px-6 py-4">Extractions</th>
                 <th className="px-6 py-4">Dernière connexion</th>
+                <th className="px-6 py-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {usersWithEmail.map(u => (
-                <tr key={u.id} className="hover:bg-slate-50 transition-colors">
+                <tr key={u.id} className={`hover:bg-slate-50 transition-colors ${selectedUsers.includes(u.id) ? 'bg-indigo-50/30' : ''}`}>
+                  <td className="px-4 py-4">
+                    <button onClick={() => toggleUserSelect(u.id)} className={selectedUsers.includes(u.id) ? 'text-indigo-600' : 'text-slate-300'}>
+                      {selectedUsers.includes(u.id) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                    </button>
+                  </td>
                   <td className="px-6 py-4 font-medium text-slate-900">{u.email}</td>
                   <td className="px-6 py-4">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-700'}`}>
@@ -274,17 +313,26 @@ export function AdminView({
                   <td className="px-6 py-4">
                     {u.lastActive ? new Date(u.lastActive.toDate ? u.lastActive.toDate() : u.lastActive).toLocaleDateString('fr-FR') : 'N/A'}
                   </td>
+                  <td className="px-6 py-4 text-right">
+                    <button 
+                      onClick={() => setConfirmDelete({ type: 'user', ids: [u.id] })}
+                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
                 </tr>
               ))}
               {usersWithEmail.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-8 text-center text-slate-500">Aucun utilisateur trouvé.</td>
+                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500">Aucun utilisateur trouvé.</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
       </motion.div>
+
       {/* History List */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
@@ -292,62 +340,118 @@ export function AdminView({
         transition={{ delay: 0.3 }}
         className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden"
       >
-        <div className="p-5 border-b border-slate-200 bg-slate-50">
+        <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
           <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
             <History className="w-4 h-4 text-indigo-500" />
             Historique complet des analyses
           </h3>
+          {selectedHistory.length > 0 && (
+            <button 
+              onClick={() => setConfirmDelete({ type: 'history', ids: selectedHistory })}
+              className="flex items-center gap-2 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-bold border border-red-100 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Supprimer ({selectedHistory.length})
+            </button>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm text-slate-600">
             <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
               <tr>
+                <th className="px-4 py-4 w-10">
+                  <button onClick={toggleAllHistory} className="text-slate-400 hover:text-indigo-600">
+                    {selectedHistory.length === allHistory.length && allHistory.length > 0 ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                  </button>
+                </th>
                 <th className="px-6 py-4">URL</th>
                 <th className="px-6 py-4">Utilisateur</th>
                 <th className="px-6 py-4">Score</th>
-                <th className="px-6 py-4">Type d'entreprise</th>
+                <th className="px-6 py-4">Type</th>
                 <th className="px-6 py-4">Date</th>
+                <th className="px-6 py-4 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {allHistory.map(h => (
-                <tr key={h.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4 font-medium text-slate-900 max-w-[200px] truncate" title={h.url}>{h.url}</td>
+                <tr key={h.id} className={`hover:bg-slate-50 transition-colors ${selectedHistory.includes(h.id) ? 'bg-indigo-50/30' : ''}`}>
+                  <td className="px-4 py-4">
+                    <button onClick={() => toggleHistorySelect(h.id)} className={selectedHistory.includes(h.id) ? 'text-indigo-600' : 'text-slate-300'}>
+                      {selectedHistory.includes(h.id) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                    </button>
+                  </td>
+                  <td className="px-6 py-4 font-medium text-slate-900 max-w-[150px] truncate">
+                    <a href={h.url} target="_blank" rel="noopener noreferrer" className="hover:text-indigo-600 flex items-center gap-1">
+                      {new URL(h.url).hostname}
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </td>
                   <td className="px-6 py-4">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${h.isAnonymous ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>
-                      {h.isAnonymous ? 'Anonyme' : (h.userId || 'Connecté')}
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${h.isAnonymous ? 'bg-amber-50 text-amber-600 border border-amber-100' : 'bg-indigo-50 text-indigo-600 border border-indigo-100'}`}>
+                      {h.isAnonymous ? 'Anon' : (h.userId?.slice(0, 8) || 'User')}
                     </span>
                   </td>
                   <td className="px-6 py-4">
                     {h.ai?.scoreGlobal !== undefined ? (
-                      <span className={`font-bold ${h.ai.scoreGlobal >= 70 ? 'text-emerald-600' : h.ai.scoreGlobal >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
+                      <span className={`font-black ${h.ai.scoreGlobal >= 70 ? 'text-emerald-500' : h.ai.scoreGlobal >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
                         {h.ai.scoreGlobal}
                       </span>
                     ) : (
-                      <button 
-                        onClick={() => onScore(h)}
-                        className="text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1"
-                      >
-                        <Sparkles className="w-3 h-3" />
-                        Scorer
-                      </button>
+                      <button onClick={() => onScore(h)} className="text-indigo-600 hover:scale-105 transition-transform"><Sparkles className="w-4 h-4" /></button>
                     )}
                   </td>
-                  <td className="px-6 py-4">{h.ai?.businessType || 'N/A'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {h.createdAt ? new Date(h.createdAt.toDate ? h.createdAt.toDate() : h.createdAt).toLocaleString('fr-FR') : 'N/A'}
+                  <td className="px-6 py-4 text-xs font-medium">{h.ai?.businessType || 'N/A'}</td>
+                  <td className="px-6 py-4 text-xs whitespace-nowrap">
+                    {h.createdAt ? new Date(h.createdAt.toDate ? h.createdAt.toDate() : h.createdAt).toLocaleDateString('fr-FR') : 'N/A'}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <button 
+                      onClick={() => setConfirmDelete({ type: 'history', ids: [h.id] })}
+                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </td>
                 </tr>
               ))}
-              {allHistory.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-slate-500">Aucun historique trouvé.</td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
       </motion.div>
+
+      {/* Confirmation Modal */}
+      <AnimatePresence>
+        {confirmDelete && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setConfirmDelete(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full text-center"
+            >
+              <div className="w-12 h-12 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 mb-2">Confirmer la suppression ?</h3>
+              <p className="text-slate-500 mb-6 text-sm">
+                Cette action supprimera définitivement {confirmDelete.ids.length > 1 ? `ces ${confirmDelete.ids.length} ${confirmDelete.type === 'user' ? 'utilisateurs' : 'analyses'}` : `cet ${confirmDelete.type === 'user' ? 'utilisateur' : 'analyse'}`}.
+                {confirmDelete.type === 'user' && " Note : Son historique ne sera pas supprimé automatiquement."}
+              </p>
+              <div className="flex gap-3">
+                <button onClick={() => setConfirmDelete(null)} className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all">Annuler</button>
+                <button onClick={executeDelete} className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-all">Supprimer</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
