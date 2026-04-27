@@ -332,7 +332,12 @@ export default function App() {
     try {
       // Check for existing analysis
       const normalizedUrl = new URL(url).href;
-      const q = query(collection(db, 'analyses'), where('url', '==', normalizedUrl.substring(0, 1999)), limit(1));
+      const q = query(
+        collection(db, 'analyses'), 
+        where('url', '==', normalizedUrl.substring(0, 1999)),
+        where('userId', '==', user.uid),
+        limit(1)
+      );
       const querySnapshot = await getDocs(q);
       
       if (!querySnapshot.empty) {
@@ -568,10 +573,13 @@ export default function App() {
         // Update the global analysis document
         if (activeAnalysisId && user) {
           try {
-            // We only save the categories keys and counts to avoid duplicating the links array
-            const categoriesSummary: Record<string, number> = {};
+            // Store the link IDs for each category to allow reconstruction later
+            const categoriesFull: Record<string, number[]> = {};
             for (const [cat, catLinks] of Object.entries(categories)) {
-              categoriesSummary[cat] = catLinks.length;
+              // We find the original indices of these links in activePageData.links
+              categoriesFull[cat] = catLinks.map(l => 
+                activePageData.links.findIndex(orig => orig.href === l.href)
+              ).filter(idx => idx !== -1);
             }
 
             await setDoc(doc(db, 'analyses', activeAnalysisId), {
@@ -582,7 +590,7 @@ export default function App() {
                 problems: aiResult.problems,
                 opportunities: aiResult.opportunities,
                 businessType: aiResult.business_type,
-                categories: categoriesSummary
+                categories: categoriesFull
               }
             }, { merge: true });
           } catch (error) {
@@ -640,8 +648,32 @@ export default function App() {
     setAiAnalysis(null);
     setCurrentView('dashboard');
     
-    // Trigger analysis
-    handleAnalyze(manualData);
+    // If analysis already exists, use it instead of re-running
+    if (item.ai) {
+      const categories: Record<string, ExtractedLink[]> = {};
+      if (item.ai.categories) {
+        for (const [cat, indices] of Object.entries(item.ai.categories)) {
+          if (Array.isArray(indices)) {
+            categories[cat] = indices
+              .map(idx => manualData.pageData.links[idx])
+              .filter(Boolean);
+          }
+        }
+      }
+
+      setAiAnalysis({
+        score_global: item.ai.scoreGlobal,
+        main_message: item.ai.mainMessage,
+        scores: item.ai.scores,
+        problems: item.ai.problems,
+        opportunities: item.ai.opportunities,
+        business_type: item.ai.businessType,
+        categories
+      });
+    } else {
+      // Only trigger analysis if it doesn't exist yet
+      handleAnalyze(manualData);
+    }
   };
 
   const handleExportJSON = () => {
@@ -1385,7 +1417,7 @@ export default function App() {
                     </p>
                     {/* Remplacez le href par le lien vers votre page de contact, calendrier (Calendly) ou page de paiement */}
                     <a 
-                      href="mailto:contact@votresite.com" 
+                      href="mailto:gnzikoune@gmail.com" 
                       className="bg-white text-indigo-600 hover:bg-indigo-50 font-bold py-2.5 px-6 rounded-lg transition-all hover:scale-105 shadow-md inline-flex items-center gap-2 mx-auto text-sm"
                     >
                       <Rocket className="w-4 h-4" />
