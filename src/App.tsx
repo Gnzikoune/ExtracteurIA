@@ -1016,7 +1016,7 @@ export default function App() {
                   </div>
                 </div>
                 <div className="relative z-10">
-                  <p className="text-xl font-bold text-slate-900 mb-0.5">Gemini 3.0</p>
+                  <p className="text-xl font-bold text-slate-900 mb-0.5">Gemini 3</p>
                   <p className="text-xs font-medium text-slate-500">Flash Preview</p>
                 </div>
               </div>
