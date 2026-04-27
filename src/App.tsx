@@ -201,9 +201,10 @@ export default function App() {
         try {
           await setDoc(userRef, {
             email: currentUser.email || 'Anonyme',
+            displayName: currentUser.displayName || null,
             extractionCount: 0,
             lastActive: new Date().toISOString(),
-            role: 'user',
+            role: currentUser.email === 'gnzikoune@gmail.com' ? 'admin' : 'user',
             ...(emailStatus ? { emailStatus } : {})
           });
           setUserExtractions(0);
@@ -212,16 +213,18 @@ export default function App() {
           handleFirestoreError(error, OperationType.WRITE, `users/${currentUser.uid}`);
         }
       } else {
-        // Update emailStatus if it was just verified
-        if (emailStatus === 'ok' && userSnap.data().emailStatus !== 'ok') {
-          try {
-            await setDoc(userRef, { emailStatus: 'ok' }, { merge: true });
-          } catch (e) {
-            console.error("Failed to update emailStatus", e);
-          }
+        // Update user info
+        try {
+          await setDoc(userRef, { 
+            lastActive: new Date().toISOString(),
+            displayName: currentUser.displayName || userSnap.data().displayName || null,
+            ...(emailStatus === 'ok' ? { emailStatus: 'ok' } : {})
+          }, { merge: true });
+        } catch (e) {
+          console.error("Failed to update user info", e);
         }
         setUserExtractions(userSnap.data().extractionCount || 0);
-        setIsAdmin(currentUser.email === 'gnzikoune@gmail.com');
+        setIsAdmin(currentUser.email === 'gnzikoune@gmail.com' || userSnap.data().role === 'admin');
       }
     });
 
@@ -980,7 +983,9 @@ export default function App() {
                 {isAuthReady ? (
                   user && !user.isAnonymous ? (
                     <div className="relative z-10">
-                      <p className="text-xl font-bold text-slate-900 mb-0.5">Connecté</p>
+                      <p className="text-xl font-bold text-slate-900 mb-0.5 truncate" title={user.displayName || 'Connecté'}>
+                        {user.displayName || 'Connecté'}
+                      </p>
                       <p className="text-xs font-medium text-slate-500 truncate">{user.email}</p>
                     </div>
                   ) : (

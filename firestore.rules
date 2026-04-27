@@ -34,7 +34,7 @@ service cloud.firestore {
     }
 
     function isValidUser(data) {
-      return hasOnlyAllowedFields(['email', 'extractionCount', 'lastActive', 'role', 'emailStatus', 'persistentId']) &&
+      return hasOnlyAllowedFields(['email', 'displayName', 'extractionCount', 'lastActive', 'role', 'emailStatus', 'persistentId']) &&
              (!('email' in data) || data.email is string) &&
              data.extractionCount is number &&
              data.extractionCount >= 0 &&

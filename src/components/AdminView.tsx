@@ -289,6 +289,7 @@ export function AdminView({
                   </button>
                 </th>
                 <th className="px-6 py-4">Email</th>
+                <th className="px-6 py-4">Nom</th>
                 <th className="px-6 py-4">Rôle</th>
                 <th className="px-6 py-4">Extractions</th>
                 <th className="px-6 py-4">Dernière connexion</th>
@@ -304,6 +305,7 @@ export function AdminView({
                     </button>
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-900">{u.email}</td>
+                  <td className="px-6 py-4 text-slate-500 font-medium">{u.displayName || <span className="text-slate-300 italic text-xs">Non renseigné</span>}</td>
                   <td className="px-6 py-4">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-700'}`}>
                       {u.role || 'user'}
