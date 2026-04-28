@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Link as LinkIcon, ExternalLink, Loader2, Sparkles, AlertCircle, LayoutGrid, List as ListIcon, LogOut, User as UserIcon, CheckCircle2, XCircle, ArrowRight, Rocket, FileJson, FileSpreadsheet, History, ShieldAlert } from 'lucide-react';
+import { Search, Link as LinkIcon, ExternalLink, Loader2, Sparkles, AlertCircle, LayoutGrid, List as ListIcon, LogOut, User as UserIcon, CheckCircle2, XCircle, ArrowRight, ArrowLeft, Rocket, FileJson, FileSpreadsheet, History, ShieldAlert, BookOpen } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
@@ -10,8 +10,7 @@ import { doc, getDoc, setDoc, onSnapshot, collection, addDoc, query, orderBy, ge
 
 import { HistoryView } from './components/HistoryView';
 import { AdminView } from './components/AdminView';
-
-
+import { DocumentationView } from './components/DocumentationView';
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
@@ -62,7 +61,7 @@ export default function App() {
   const [showQuotaModal, setShowQuotaModal] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [persistentId, setPersistentId] = useState<string | null>(null);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'history' | 'admin'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'history' | 'admin' | 'analysis' | 'documentation'>('dashboard');
 
   // Auth & Usage State
   const [user, setUser] = useState<User | null>(null);
@@ -95,10 +94,18 @@ export default function App() {
     // Set new timer
     (window as any).inactivityTimer = setTimeout(() => {
       signOut(auth).then(() => {
-        setError("Vous avez été déconnecté pour inactivité (5 minutes).");
+        sessionStorage.setItem('inactivityLogout', 'true');
+        window.location.href = '/';
       });
     }, 300000); // 5 minutes
   }, [user]);
+
+  useEffect(() => {
+    if (sessionStorage.getItem('inactivityLogout') === 'true') {
+      setError("Vous avez été déconnecté pour inactivité (5 minutes).");
+      sessionStorage.removeItem('inactivityLogout');
+    }
+  }, []);
 
   useEffect(() => {
     // Initialize or retrieve persistent device ID
@@ -534,69 +541,124 @@ export default function App() {
     setAiError(null);
 
     try {
-      const response = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          url: activeUrl, 
-          pageData: activePageData,
-          geminiApiKey: geminiApiKey // Utilisé temporairement si pas défini côté serveur
-        })
+      const apiKey = geminiApiKey || process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error('La clé API Gemini n\'est pas configurée');
+      }
+
+      // DEBUG: Afficher les 4 premiers caractères de la clé utilisée
+      console.log(`Utilisation de la clé API Gemini: ${apiKey.substring(0, 4)}...`);
+
+      const ai = new GoogleGenAI({ apiKey });
+      
+      const prompt = `
+        Analyze the following webpage and its extracted links to provide a business conversion diagnostic.
+        URL: ${activeUrl}
+        Title: ${activePageData.title}
+        Description: ${activePageData.description}
+        
+        Total Links: ${activePageData.links.length}
+        Links Data:
+        ${JSON.stringify(activePageData.links.slice(0, 800).map((l, index) => ({ id: index, text: l.text, href: l.href })))}
+        
+        Please provide a comprehensive business diagnostic of this webpage based on its metadata and links:
+        
+        1. "score_global": A score out of 100 representing the overall conversion potential.
+        2. "main_message": A single, impactful sentence summarizing the main issue or opportunity (e.g., "⚠️ Votre site présente plusieurs points qui peuvent vous faire perdre des clients"). (IN FRENCH)
+        3. "scores": Provide sub-scores out of 100 for "structure", "conversion", and "presence" (digital presence).
+        4. "problems": Identify 3 to 5 main business weaknesses based on the links (e.g., missing booking page, confusing navigation). For each, provide a "title" (the problem) and "impact" (the business consequence, e.g., "Vous perdez des clients prêts à passer à l'action"). (IN FRENCH)
+        5. "opportunities": Provide 2 to 4 concrete, actionable improvements. (IN FRENCH)
+        6. "business_type": Guess the type of business (e.g., "restaurant", "e-commerce", "blog", "agence", "inconnu"). (IN FRENCH)
+        7. "categories": Categorize ALL the provided links into meaningful groups (e.g., "Navigation du site", "Réseaux Sociaux", "Articles", "Ressources Externes", etc.). 
+           IMPORTANT: To save space, return the "id" of each link in the corresponding category array. EVERY single link id from 0 to ${Math.min(activePageData.links.length, 800) - 1} MUST be placed in exactly one category. (IN FRENCH)
+        
+        Return the response strictly as a JSON object with this structure:
+        {
+          "score_global": 62,
+          "main_message": "⚠️ Votre site présente plusieurs points qui peuvent vous faire perdre des clients",
+          "scores": {
+            "structure": 70,
+            "conversion": 40,
+            "presence": 75
+          },
+          "problems": [
+            {
+              "title": "Aucun système de réservation",
+              "impact": "Vous perdez des clients prêts à passer à l'action"
+            }
+          ],
+          "opportunities": [
+            "Ajouter un système de réservation",
+            "Simplifier le menu principal"
+          ],
+          "business_type": "restaurant",
+          "categories": {
+            "Navigation": [0, 1, 5],
+            "Réseaux Sociaux": [2, 3]
+          }
+        }
+      `;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+        },
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Échec de l\\'analyse IA');
-      }
-
-      const parsed = await response.json();
+      if (response.text) {
+        const parsed = JSON.parse(response.text);
         
-      // Map back to ExtractedLink format using the returned indices
-      const categories: Record<string, ExtractedLink[]> = {};
-      for (const [category, linkIds] of Object.entries(parsed.categories)) {
-        categories[category] = (linkIds as number[])
-          .map(id => activePageData.links[id])
-          .filter(Boolean); // Filter out any undefined in case AI hallucinates an ID
-      }
-      
-      const aiResult = {
-        score_global: parsed.score_global || 50,
-        main_message: parsed.main_message || "Analyse terminée",
-        scores: parsed.scores || { structure: 50, conversion: 50, presence: 50 },
-        problems: parsed.problems || [],
-        opportunities: parsed.opportunities || [],
-        business_type: parsed.business_type || "inconnu",
-        categories
-      };
-      
-      setAiAnalysis(aiResult);
-
-      // Update the global analysis document
-      if (activeAnalysisId && user) {
-        try {
-          // Store the link IDs for each category to allow reconstruction later
-          const categoriesFull: Record<string, number[]> = {};
-          for (const [cat, catLinks] of Object.entries(categories)) {
-            // We find the original indices of these links in activePageData.links
-            categoriesFull[cat] = catLinks.map(l => 
-              activePageData.links.findIndex(orig => orig.href === l.href)
-            ).filter(idx => idx !== -1);
-          }
-
-          await setDoc(doc(db, 'analyses', activeAnalysisId), {
-            ai: {
-              scoreGlobal: aiResult.score_global,
-              mainMessage: aiResult.main_message,
-              scores: aiResult.scores,
-              problems: aiResult.problems,
-              opportunities: aiResult.opportunities,
-              businessType: aiResult.business_type,
-              categories: categoriesFull
-            }
-          }, { merge: true });
-        } catch (error) {
-          console.error("Failed to update analysis with AI results:", error);
+        // Map back to ExtractedLink format using the returned indices
+        const categories: Record<string, ExtractedLink[]> = {};
+        for (const [category, linkIds] of Object.entries(parsed.categories)) {
+          categories[category] = (linkIds as number[])
+            .map(id => activePageData.links[id])
+            .filter(Boolean); // Filter out any undefined in case AI hallucinates an ID
         }
+        
+        const aiResult = {
+          score_global: parsed.score_global || 50,
+          main_message: parsed.main_message || "Analyse terminée",
+          scores: parsed.scores || { structure: 50, conversion: 50, presence: 50 },
+          problems: parsed.problems || [],
+          opportunities: parsed.opportunities || [],
+          business_type: parsed.business_type || "inconnu",
+          categories
+        };
+        
+        setAiAnalysis(aiResult);
+
+        // Update the global analysis document
+        if (activeAnalysisId && user) {
+          try {
+            // Store the link IDs for each category to allow reconstruction later
+            const categoriesFull: Record<string, number[]> = {};
+            for (const [cat, catLinks] of Object.entries(categories)) {
+              // We find the original indices of these links in activePageData.links
+              categoriesFull[cat] = catLinks.map(l => 
+                activePageData.links.findIndex(orig => orig.href === l.href)
+              ).filter(idx => idx !== -1);
+            }
+
+            await setDoc(doc(db, 'analyses', activeAnalysisId), {
+              ai: {
+                scoreGlobal: aiResult.score_global,
+                mainMessage: aiResult.main_message,
+                scores: aiResult.scores,
+                problems: aiResult.problems,
+                opportunities: aiResult.opportunities,
+                businessType: aiResult.business_type,
+                categories: categoriesFull
+              }
+            }, { merge: true });
+          } catch (error) {
+            console.error("Failed to update analysis with AI results:", error);
+          }
+        }
+      } else {
+        throw new Error('Aucune réponse de Gemini');
       }
     } catch (err: any) {
       console.error('AI Analysis error:', err);
@@ -676,7 +738,7 @@ export default function App() {
     setPageData(manualData.pageData);
     setCurrentAnalysisId(manualData.analysisId);
     setAiAnalysis(null);
-    setCurrentView('dashboard');
+    setCurrentView('analysis');
     
     // If analysis already exists, use it instead of re-running
     if (item.ai) {
@@ -793,6 +855,14 @@ export default function App() {
               Administration
             </button>
           )}
+
+          <button 
+            onClick={() => setCurrentView('documentation')}
+            className={cn("w-full px-3 py-2.5 rounded-lg font-medium flex items-center gap-3 transition-colors", currentView === 'documentation' ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900")}
+          >
+            <BookOpen className="w-5 h-5" />
+            Documentation
+          </button>
         </nav>
 
         {/* User Profile in Sidebar */}
@@ -1271,7 +1341,7 @@ export default function App() {
 
 
         {/* Results Area */}
-        {currentView === 'dashboard' && (
+        {(currentView === 'dashboard' || currentView === 'analysis') && (
           <AnimatePresence mode="wait">
           {pageData && (
             <motion.div
@@ -1281,6 +1351,15 @@ export default function App() {
               exit={{ opacity: 0, y: -20 }}
               className="space-y-8"
             >
+              {currentView === 'analysis' && (
+                <button
+                  onClick={() => setCurrentView('history')}
+                  className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-xl text-sm font-semibold transition-all shadow-sm w-fit mb-4"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Retour à l'historique
+                </button>
+              )}
               {/* Page Info & AI Action */}
               <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow border border-slate-200 p-5 sm:p-6 flex flex-col sm:flex-row gap-6 justify-between items-start sm:items-center relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-40 h-40 bg-indigo-50 rounded-full blur-3xl -ml-10 -mt-10"></div>
@@ -1610,6 +1689,13 @@ export default function App() {
           />
         )}
 
+        {currentView === 'documentation' && (
+          <DocumentationView 
+            maxUserExtractions={maxUserExtractions} 
+            maxAnonExtractions={maxAnonExtractions} 
+          />
+        )}
+
         {/* Mobile Bottom Navigation */}
         {isDashboardView && (
           <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 flex justify-around items-center h-16 px-2 pb-safe">
@@ -1640,6 +1726,14 @@ export default function App() {
                 <span className="text-[10px] font-medium">Admin</span>
               </button>
             )}
+
+            <button 
+              onClick={() => setCurrentView('documentation')}
+              className={cn("flex flex-col items-center justify-center w-full h-full gap-1", currentView === 'documentation' ? "text-blue-600" : "text-slate-500")}
+            >
+              <BookOpen className="w-5 h-5" />
+              <span className="text-[10px] font-medium">Docs</span>
+            </button>
           </nav>
         )}
 

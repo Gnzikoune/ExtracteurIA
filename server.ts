@@ -3,7 +3,6 @@ import { createServer as createViteServer } from "vite";
 import * as cheerio from "cheerio";
 import path from "path";
 import puppeteer from "puppeteer";
-import { GoogleGenAI } from '@google/genai';
 
 async function startServer() {
   const app = express();
@@ -211,73 +210,6 @@ async function startServer() {
       }
 
       res.status(500).json({ error: friendlyMessage });
-    }
-  });
-
-  app.post("/api/analyze", async (req, res) => {
-    try {
-      const { url, pageData, geminiApiKey } = req.body;
-      if (!pageData || !pageData.links) {
-        return res.status(400).json({ error: "Les données de la page sont requises" });
-      }
-
-      // Utilise la clé API définie dans le serveur, ou celle fournie par la config Firebase du frontend
-      const apiKey = process.env.GEMINI_API_KEY || geminiApiKey;
-      if (!apiKey) {
-        return res.status(500).json({ error: "La clé API Gemini n'est pas configurée" });
-      }
-
-      const ai = new GoogleGenAI({ apiKey });
-      
-      const prompt = `
-        Analyze the following webpage and its extracted links to provide a business conversion diagnostic.
-        URL: ${url}
-        Title: ${pageData.title}
-        Description: ${pageData.description}
-        
-        Total Links: ${pageData.links.length}
-        Links Data:
-        ${JSON.stringify(pageData.links.slice(0, 800).map((l: any, index: number) => ({ id: index, text: l.text, href: l.href })))}
-        
-        Please provide a comprehensive business diagnostic of this webpage based on its metadata and links:
-        
-        1. "score_global": A score out of 100 representing the overall conversion potential.
-        2. "main_message": A single, impactful sentence summarizing the main issue or opportunity (e.g., "⚠️ Votre site présente plusieurs points qui peuvent vous faire perdre des clients"). (IN FRENCH)
-        3. "scores": Provide sub-scores out of 100 for "structure", "conversion", and "presence" (digital presence).
-        4. "problems": Identify 3 to 5 main business weaknesses based on the links (e.g., missing booking page, confusing navigation). For each, provide a "title" (the problem) and "impact" (the business consequence, e.g., "Vous perdez des clients prêts à passer à l'action"). (IN FRENCH)
-        5. "opportunities": Provide 2 to 4 concrete, actionable improvements. (IN FRENCH)
-        6. "business_type": Guess the type of business (e.g., "restaurant", "e-commerce", "blog", "agence", "inconnu"). (IN FRENCH)
-        7. "categories": Categorize ALL the provided links into meaningful groups (e.g., "Navigation du site", "Réseaux Sociaux", "Articles", "Ressources Externes", etc.). 
-           IMPORTANT: To save space, return the "id" of each link in the corresponding category array. EVERY single link id from 0 to ${Math.min(pageData.links.length, 800) - 1} MUST be placed in exactly one category. (IN FRENCH)
-        
-        Return the response strictly as a JSON object with this structure:
-        {
-          "score_global": 62,
-          "main_message": "...",
-          "scores": { "structure": 70, "conversion": 40, "presence": 75 },
-          "problems": [ { "title": "...", "impact": "..." } ],
-          "opportunities": [ "..." ],
-          "business_type": "restaurant",
-          "categories": { "Navigation": [0, 1], "Réseaux": [2] }
-        }
-      `;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-        },
-      });
-
-      if (response.text) {
-        res.json(JSON.parse(response.text));
-      } else {
-        throw new Error('Aucune réponse de Gemini');
-      }
-    } catch (error: any) {
-      console.error("AI Analysis error:", error);
-      res.status(500).json({ error: error.message || "Erreur lors de l'analyse IA" });
     }
   });
 
