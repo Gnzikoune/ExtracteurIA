@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Link as LinkIcon, ExternalLink, Loader2, Sparkles, AlertCircle, LayoutGrid, List as ListIcon, LogOut, User as UserIcon, CheckCircle2, XCircle, ArrowRight, Rocket, FileJson, FileSpreadsheet, History, ShieldAlert } from 'lucide-react';
+import { Search, Link as LinkIcon, ExternalLink, Loader2, Sparkles, AlertCircle, LayoutGrid, List as ListIcon, LogOut, User as UserIcon, CheckCircle2, XCircle, ArrowRight, ArrowLeft, Rocket, FileJson, FileSpreadsheet, History, ShieldAlert, BookOpen } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
@@ -10,8 +10,7 @@ import { doc, getDoc, setDoc, onSnapshot, collection, addDoc, query, orderBy, ge
 
 import { HistoryView } from './components/HistoryView';
 import { AdminView } from './components/AdminView';
-
-
+import { DocumentationView } from './components/DocumentationView';
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
@@ -62,7 +61,7 @@ export default function App() {
   const [showQuotaModal, setShowQuotaModal] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [persistentId, setPersistentId] = useState<string | null>(null);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'history' | 'admin'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'history' | 'admin' | 'analysis' | 'documentation'>('dashboard');
 
   // Auth & Usage State
   const [user, setUser] = useState<User | null>(null);
@@ -95,10 +94,18 @@ export default function App() {
     // Set new timer
     (window as any).inactivityTimer = setTimeout(() => {
       signOut(auth).then(() => {
-        setError("Vous avez été déconnecté pour inactivité (5 minutes).");
+        sessionStorage.setItem('inactivityLogout', 'true');
+        window.location.href = '/';
       });
     }, 300000); // 5 minutes
   }, [user]);
+
+  useEffect(() => {
+    if (sessionStorage.getItem('inactivityLogout') === 'true') {
+      setError("Vous avez été déconnecté pour inactivité (5 minutes).");
+      sessionStorage.removeItem('inactivityLogout');
+    }
+  }, []);
 
   useEffect(() => {
     // Initialize or retrieve persistent device ID
@@ -731,7 +738,7 @@ export default function App() {
     setPageData(manualData.pageData);
     setCurrentAnalysisId(manualData.analysisId);
     setAiAnalysis(null);
-    setCurrentView('dashboard');
+    setCurrentView('analysis');
     
     // If analysis already exists, use it instead of re-running
     if (item.ai) {
@@ -848,6 +855,14 @@ export default function App() {
               Administration
             </button>
           )}
+
+          <button 
+            onClick={() => setCurrentView('documentation')}
+            className={cn("w-full px-3 py-2.5 rounded-lg font-medium flex items-center gap-3 transition-colors", currentView === 'documentation' ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900")}
+          >
+            <BookOpen className="w-5 h-5" />
+            Documentation
+          </button>
         </nav>
 
         {/* User Profile in Sidebar */}
@@ -1326,7 +1341,7 @@ export default function App() {
 
 
         {/* Results Area */}
-        {currentView === 'dashboard' && (
+        {(currentView === 'dashboard' || currentView === 'analysis') && (
           <AnimatePresence mode="wait">
           {pageData && (
             <motion.div
@@ -1336,6 +1351,15 @@ export default function App() {
               exit={{ opacity: 0, y: -20 }}
               className="space-y-8"
             >
+              {currentView === 'analysis' && (
+                <button
+                  onClick={() => setCurrentView('history')}
+                  className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-xl text-sm font-semibold transition-all shadow-sm w-fit mb-4"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Retour à l'historique
+                </button>
+              )}
               {/* Page Info & AI Action */}
               <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow border border-slate-200 p-5 sm:p-6 flex flex-col sm:flex-row gap-6 justify-between items-start sm:items-center relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-40 h-40 bg-indigo-50 rounded-full blur-3xl -ml-10 -mt-10"></div>
@@ -1665,6 +1689,13 @@ export default function App() {
           />
         )}
 
+        {currentView === 'documentation' && (
+          <DocumentationView 
+            maxUserExtractions={maxUserExtractions} 
+            maxAnonExtractions={maxAnonExtractions} 
+          />
+        )}
+
         {/* Mobile Bottom Navigation */}
         {isDashboardView && (
           <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 flex justify-around items-center h-16 px-2 pb-safe">
@@ -1695,6 +1726,14 @@ export default function App() {
                 <span className="text-[10px] font-medium">Admin</span>
               </button>
             )}
+
+            <button 
+              onClick={() => setCurrentView('documentation')}
+              className={cn("flex flex-col items-center justify-center w-full h-full gap-1", currentView === 'documentation' ? "text-blue-600" : "text-slate-500")}
+            >
+              <BookOpen className="w-5 h-5" />
+              <span className="text-[10px] font-medium">Docs</span>
+            </button>
           </nav>
         )}
 
