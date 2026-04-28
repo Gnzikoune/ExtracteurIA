@@ -534,124 +534,69 @@ export default function App() {
     setAiError(null);
 
     try {
-      const apiKey = geminiApiKey || process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error('La clé API Gemini n\'est pas configurée');
-      }
-
-      // DEBUG: Afficher les 4 premiers caractères de la clé utilisée
-      console.log(`Utilisation de la clé API Gemini: ${apiKey.substring(0, 4)}...`);
-
-      const ai = new GoogleGenAI({ apiKey });
-      
-      const prompt = `
-        Analyze the following webpage and its extracted links to provide a business conversion diagnostic.
-        URL: ${activeUrl}
-        Title: ${activePageData.title}
-        Description: ${activePageData.description}
-        
-        Total Links: ${activePageData.links.length}
-        Links Data:
-        ${JSON.stringify(activePageData.links.slice(0, 800).map((l, index) => ({ id: index, text: l.text, href: l.href })))}
-        
-        Please provide a comprehensive business diagnostic of this webpage based on its metadata and links:
-        
-        1. "score_global": A score out of 100 representing the overall conversion potential.
-        2. "main_message": A single, impactful sentence summarizing the main issue or opportunity (e.g., "⚠️ Votre site présente plusieurs points qui peuvent vous faire perdre des clients"). (IN FRENCH)
-        3. "scores": Provide sub-scores out of 100 for "structure", "conversion", and "presence" (digital presence).
-        4. "problems": Identify 3 to 5 main business weaknesses based on the links (e.g., missing booking page, confusing navigation). For each, provide a "title" (the problem) and "impact" (the business consequence, e.g., "Vous perdez des clients prêts à passer à l'action"). (IN FRENCH)
-        5. "opportunities": Provide 2 to 4 concrete, actionable improvements. (IN FRENCH)
-        6. "business_type": Guess the type of business (e.g., "restaurant", "e-commerce", "blog", "agence", "inconnu"). (IN FRENCH)
-        7. "categories": Categorize ALL the provided links into meaningful groups (e.g., "Navigation du site", "Réseaux Sociaux", "Articles", "Ressources Externes", etc.). 
-           IMPORTANT: To save space, return the "id" of each link in the corresponding category array. EVERY single link id from 0 to ${Math.min(activePageData.links.length, 800) - 1} MUST be placed in exactly one category. (IN FRENCH)
-        
-        Return the response strictly as a JSON object with this structure:
-        {
-          "score_global": 62,
-          "main_message": "⚠️ Votre site présente plusieurs points qui peuvent vous faire perdre des clients",
-          "scores": {
-            "structure": 70,
-            "conversion": 40,
-            "presence": 75
-          },
-          "problems": [
-            {
-              "title": "Aucun système de réservation",
-              "impact": "Vous perdez des clients prêts à passer à l'action"
-            }
-          ],
-          "opportunities": [
-            "Ajouter un système de réservation",
-            "Simplifier le menu principal"
-          ],
-          "business_type": "restaurant",
-          "categories": {
-            "Navigation": [0, 1, 5],
-            "Réseaux Sociaux": [2, 3]
-          }
-        }
-      `;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-        },
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          url: activeUrl, 
+          pageData: activePageData,
+          geminiApiKey: geminiApiKey // Utilisé temporairement si pas défini côté serveur
+        })
       });
 
-      if (response.text) {
-        const parsed = JSON.parse(response.text);
-        
-        // Map back to ExtractedLink format using the returned indices
-        const categories: Record<string, ExtractedLink[]> = {};
-        for (const [category, linkIds] of Object.entries(parsed.categories)) {
-          categories[category] = (linkIds as number[])
-            .map(id => activePageData.links[id])
-            .filter(Boolean); // Filter out any undefined in case AI hallucinates an ID
-        }
-        
-        const aiResult = {
-          score_global: parsed.score_global || 50,
-          main_message: parsed.main_message || "Analyse terminée",
-          scores: parsed.scores || { structure: 50, conversion: 50, presence: 50 },
-          problems: parsed.problems || [],
-          opportunities: parsed.opportunities || [],
-          business_type: parsed.business_type || "inconnu",
-          categories
-        };
-        
-        setAiAnalysis(aiResult);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Échec de l\\'analyse IA');
+      }
 
-        // Update the global analysis document
-        if (activeAnalysisId && user) {
-          try {
-            // Store the link IDs for each category to allow reconstruction later
-            const categoriesFull: Record<string, number[]> = {};
-            for (const [cat, catLinks] of Object.entries(categories)) {
-              // We find the original indices of these links in activePageData.links
-              categoriesFull[cat] = catLinks.map(l => 
-                activePageData.links.findIndex(orig => orig.href === l.href)
-              ).filter(idx => idx !== -1);
-            }
+      const parsed = await response.json();
+        
+      // Map back to ExtractedLink format using the returned indices
+      const categories: Record<string, ExtractedLink[]> = {};
+      for (const [category, linkIds] of Object.entries(parsed.categories)) {
+        categories[category] = (linkIds as number[])
+          .map(id => activePageData.links[id])
+          .filter(Boolean); // Filter out any undefined in case AI hallucinates an ID
+      }
+      
+      const aiResult = {
+        score_global: parsed.score_global || 50,
+        main_message: parsed.main_message || "Analyse terminée",
+        scores: parsed.scores || { structure: 50, conversion: 50, presence: 50 },
+        problems: parsed.problems || [],
+        opportunities: parsed.opportunities || [],
+        business_type: parsed.business_type || "inconnu",
+        categories
+      };
+      
+      setAiAnalysis(aiResult);
 
-            await setDoc(doc(db, 'analyses', activeAnalysisId), {
-              ai: {
-                scoreGlobal: aiResult.score_global,
-                mainMessage: aiResult.main_message,
-                scores: aiResult.scores,
-                problems: aiResult.problems,
-                opportunities: aiResult.opportunities,
-                businessType: aiResult.business_type,
-                categories: categoriesFull
-              }
-            }, { merge: true });
-          } catch (error) {
-            console.error("Failed to update analysis with AI results:", error);
+      // Update the global analysis document
+      if (activeAnalysisId && user) {
+        try {
+          // Store the link IDs for each category to allow reconstruction later
+          const categoriesFull: Record<string, number[]> = {};
+          for (const [cat, catLinks] of Object.entries(categories)) {
+            // We find the original indices of these links in activePageData.links
+            categoriesFull[cat] = catLinks.map(l => 
+              activePageData.links.findIndex(orig => orig.href === l.href)
+            ).filter(idx => idx !== -1);
           }
+
+          await setDoc(doc(db, 'analyses', activeAnalysisId), {
+            ai: {
+              scoreGlobal: aiResult.score_global,
+              mainMessage: aiResult.main_message,
+              scores: aiResult.scores,
+              problems: aiResult.problems,
+              opportunities: aiResult.opportunities,
+              businessType: aiResult.business_type,
+              categories: categoriesFull
+            }
+          }, { merge: true });
+        } catch (error) {
+          console.error("Failed to update analysis with AI results:", error);
         }
-      } else {
-        throw new Error('Aucune réponse de Gemini');
       }
     } catch (err: any) {
       console.error('AI Analysis error:', err);
