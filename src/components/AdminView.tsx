@@ -1,8 +1,15 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, Settings, Users, Database, Save, CheckCircle2, History, Sparkles, Eye, EyeOff, Trash2, CheckSquare, Square, AlertCircle, ExternalLink } from 'lucide-react';
-import { doc, setDoc } from 'firebase/firestore';
+import { Loader2, Settings, Users, Database, Save, CheckCircle2, History, Sparkles, Eye, EyeOff, Trash2, CheckSquare, Square, AlertCircle, ExternalLink, BarChart2 } from 'lucide-react';
+import { doc, setDoc, collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 export function AdminView({ 
   allHistory, 
@@ -46,12 +53,49 @@ export function AdminView({
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [selectedHistory, setSelectedHistory] = useState<string[]>([]);
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'user' | 'history', ids: string[] } | null>(null);
+  const [activeTab, setActiveTab] = useState<'settings' | 'audience' | 'users' | 'history'>('settings');
+  
+  // Analytics states
+  const [analyticsData, setAnalyticsData] = useState<any[]>([]);
+  const [recentEvents, setRecentEvents] = useState<any[]>([]);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(true);
 
   // Synchronize local state with props when they are loaded from Firestore
   React.useEffect(() => {
     if (geminiApiKey) setApiKey(geminiApiKey);
     if (emailVerifyApiKey) setEmailApiKey(emailVerifyApiKey);
   }, [geminiApiKey, emailVerifyApiKey]);
+
+  // Fetch Analytics
+  React.useEffect(() => {
+    setIsLoadingAnalytics(true);
+    
+    // Fetch last 7 days of stats
+    const statsQuery = query(collection(db, 'analytics_stats'), orderBy('updatedAt', 'desc'), limit(7));
+    const unsubscribeStats = onSnapshot(statsQuery, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({
+        date: doc.id,
+        ...doc.data()
+      })).reverse();
+      setAnalyticsData(data);
+      setIsLoadingAnalytics(false);
+    });
+
+    // Fetch last 20 events
+    const eventsQuery = query(collection(db, 'analytics_events'), orderBy('timestamp', 'desc'), limit(20));
+    const unsubscribeEvents = onSnapshot(eventsQuery, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setRecentEvents(data);
+    });
+
+    return () => {
+      unsubscribeStats();
+      unsubscribeEvents();
+    };
+  }, []);
 
   // Only show users with an email address
   const usersWithEmail = allUsers.filter(u => u.email && u.email !== 'Anonyme');
@@ -123,15 +167,41 @@ export function AdminView({
   }
 
   return (
-    <div className="space-y-8 pb-12">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
-          <Settings className="w-5 h-5" />
+    <div className="space-y-6 pb-12">
+      {/* Header + Tab Navigation */}
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+            <Settings className="w-5 h-5" />
+          </div>
+          <h2 className="text-lg font-bold text-slate-900">Administration</h2>
         </div>
-        <h2 className="text-lg font-bold text-slate-900">Administration</h2>
+        <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit flex-wrap">
+          {[
+            { id: 'settings', label: 'Paramètres', icon: Settings },
+            { id: 'audience', label: 'Audience', icon: BarChart2 },
+            { id: 'users', label: `Utilisateurs (${usersWithEmail.length})`, icon: Users },
+            { id: 'history', label: `Historique (${allHistory.length})`, icon: History },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                activeTab === tab.id
+                  ? 'bg-white text-indigo-700 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <tab.icon className="w-3.5 h-3.5" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      {/* ── SETTINGS TAB ─────────────────────────────── */}
+      {activeTab === 'settings' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Settings Panel */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
@@ -255,9 +325,106 @@ export function AdminView({
             </div>
           </div>
         </motion.div>
-      </div>
+        </div>
+      )}
 
-      {/* Users List */}
+      {/* ── AUDIENCE TAB ─────────────────────────────── */}
+      {activeTab === 'audience' && (
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+        className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden"
+      >
+        <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <BarChart2 className="w-4 h-4 text-indigo-500" />
+            Analyses d'Audience (Interne)
+          </h3>
+          <div className="flex gap-2">
+            <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded-full uppercase tracking-wider">7 derniers jours</span>
+          </div>
+        </div>
+        
+        <div className="p-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-6">
+              <div className="h-[250px] w-full">
+                {analyticsData.length === 0 || analyticsData.every(d => !d.pageViews && !d.extractions) ? (
+                  <div className="h-full flex flex-col items-center justify-center gap-3 text-slate-400">
+                    <BarChart2 className="w-10 h-10 opacity-20" />
+                    <div className="text-center">
+                      <p className="text-sm font-semibold">En attente de données</p>
+                      <p className="text-xs mt-1 text-slate-400">Le graphique se remplira au fil des visites</p>
+                    </div>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analyticsData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#64748b'}} />
+                      <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#64748b'}} allowDecimals={false} />
+                      <Tooltip 
+                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                        cursor={{ fill: '#f8fafc' }}
+                      />
+                      <Bar dataKey="pageViews" name="Vues" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={20} />
+                      <Bar dataKey="extractions" name="Extractions" fill="#10b981" radius={[4, 4, 0, 0]} barSize={20} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+              {/* Stats summary row */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-indigo-50 rounded-lg p-3 text-center">
+                  <p className="text-lg font-black text-indigo-700">{analyticsData.reduce((sum, d) => sum + (d.pageViews || 0), 0)}</p>
+                  <p className="text-[10px] text-indigo-500 font-medium">Vues totales</p>
+                </div>
+                <div className="bg-emerald-50 rounded-lg p-3 text-center">
+                  <p className="text-lg font-black text-emerald-700">{analyticsData.reduce((sum, d) => sum + (d.extractions || 0), 0)}</p>
+                  <p className="text-[10px] text-emerald-500 font-medium">Extractions</p>
+                </div>
+                <div className="bg-orange-50 rounded-lg p-3 text-center">
+                  <p className="text-lg font-black text-orange-700">{analyticsData.reduce((sum, d) => sum + (d.errors || 0), 0)}</p>
+                  <p className="text-[10px] text-orange-500 font-medium">Erreurs</p>
+                </div>
+              </div>
+              <div className="flex justify-center gap-6 text-xs font-medium">
+                <div className="flex items-center gap-2"><span className="w-3 h-3 bg-indigo-500 rounded-full"></span> Vues de pages</div>
+                <div className="flex items-center gap-2"><span className="w-3 h-3 bg-emerald-500 rounded-full"></span> Analyses réussies</div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Activité récente</h4>
+              <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
+                {recentEvents.map((event) => (
+                  <div key={event.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-slate-50 transition-colors">
+                    <div className={cn(
+                      "mt-0.5 w-2 h-2 rounded-full shrink-0",
+                      event.event === 'extraction_completed' ? "bg-emerald-500" : 
+                      event.event === 'extraction_failed' ? "bg-red-500" : "bg-indigo-400"
+                    )} />
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-800 truncate">
+                        {event.event === 'page_view' ? 'Vue de page' : 
+                         event.event === 'extraction_completed' ? 'Extraction réussie' :
+                         event.event === 'extraction_failed' ? 'Échec extraction' : event.event}
+                      </p>
+                      <p className="text-[10px] text-slate-500 truncate">{event.url || event.path || 'ExtracteurIA'}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+      )}
+
+      {/* ── USERS TAB ─────────────────────────────── */}
+      {activeTab === 'users' && (
+      <>{/* Users List */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -363,8 +530,11 @@ export function AdminView({
           {usersWithEmail.length === 0 && <div className="p-8 text-center text-slate-500 text-sm">Aucun utilisateur trouvé.</div>}
         </div>
       </motion.div>
+      </>
+      )}
 
-      {/* History List */}
+      {/* ── HISTORY TAB ─────────────────────────────── */}
+      {activeTab === 'history' && (
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -491,8 +661,9 @@ export function AdminView({
           {allHistory.length === 0 && <div className="p-8 text-center text-slate-500 text-sm">Aucun historique trouvé.</div>}
         </div>
       </motion.div>
+      )}
 
-      {/* Confirmation Modal */}
+      {/* Confirmation Modal — always rendered */}
       <AnimatePresence>
         {confirmDelete && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
