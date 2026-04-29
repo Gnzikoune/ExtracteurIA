@@ -34,6 +34,25 @@
     <!-- Canonical URL -->
     <link rel="canonical" href="https://extracteur-ia.vercel.app/" />
 
+    <!-- Google Analytics (Consent Mode) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-CTLJXXV9Q3"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      
+      // Default consent mode (denied until user accepts)
+      gtag('consent', 'default', {
+        'ad_storage': 'denied',
+        'analytics_storage': 'denied',
+        'personalization_storage': 'denied',
+        'functionality_storage': 'granted',
+        'security_storage': 'granted'
+      });
+
+      gtag('js', new Date());
+      gtag('config', 'G-CTLJXXV9Q3');
+    </script>
+
     <!-- Structured Data (JSON-LD) -->
     <script type="application/ld+json">
     {

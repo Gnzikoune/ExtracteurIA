@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Routes, Route, useNavigate, useLocation, Link, Navigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { Search, Link as LinkIcon, ExternalLink, Loader2, Sparkles, AlertCircle, LayoutGrid, List as ListIcon, LogOut, User as UserIcon, CheckCircle2, XCircle, ArrowRight, ArrowLeft, Rocket, FileJson, FileSpreadsheet, History, ShieldAlert, BookOpen } from 'lucide-react';
+import { Search, Link as LinkIcon, ExternalLink, Loader2, Sparkles, AlertCircle, LayoutGrid, List as ListIcon, LogOut, User as UserIcon, CheckCircle2, XCircle, ArrowRight, ArrowLeft, Rocket, FileJson, FileSpreadsheet, History, ShieldAlert, BookOpen, Menu, X } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
@@ -16,6 +16,25 @@ import { DocumentationView } from './components/DocumentationView';
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+
+// Cookie Helpers
+const setCookie = (name: string, value: string, days: number) => {
+  const date = new Date();
+  date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+  const expires = "expires=" + date.toUTCString();
+  document.cookie = name + "=" + value + ";" + expires + ";path=/;SameSite=Lax";
+};
+
+const getCookie = (name: string) => {
+  const nameEQ = name + "=";
+  const ca = document.cookie.split(';');
+  for(let i=0; i < ca.length; i++) {
+    let c = ca[i];
+    while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+    if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+  }
+  return null;
+};
 
 interface ExtractedLink {
   text: string;
@@ -63,6 +82,7 @@ export default function App() {
   const [showQuotaModal, setShowQuotaModal] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [persistentId, setPersistentId] = useState<string | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -100,6 +120,7 @@ export default function App() {
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [isLoadingAdmin, setIsLoadingAdmin] = useState(false);
+  const [showConsent, setShowConsent] = useState(false);
 
   // Inactivity Timeout (5 minutes)
   const resetInactivityTimer = useCallback(() => {
@@ -134,6 +155,21 @@ export default function App() {
       localStorage.setItem('extia_pid', pid);
     }
     setPersistentId(pid);
+  }, []);
+
+  useEffect(() => {
+    const consent = getCookie('cookie_consent');
+    if (!consent) {
+      setShowConsent(true);
+    } else if (consent === 'true') {
+      // Re-grant consent for analytics if already accepted
+      if ((window as any).gtag) {
+        (window as any).gtag('consent', 'update', {
+          'ad_storage': 'granted',
+          'analytics_storage': 'granted'
+        });
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -837,7 +873,7 @@ export default function App() {
       {/* Top Dashboard Stats */}
       {isAuthReady && user && !user.isAnonymous && location.pathname === '/' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-8">
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 relative overflow-hidden group">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 sm:p-5 relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-100 rounded-full blur-2xl -mr-10 -mt-10 transition-transform group-hover:scale-110"></div>
             <div className="flex items-center justify-between mb-4 relative z-10">
               <h3 className="font-semibold text-slate-600 text-sm">Extractions utilisées</h3>
@@ -846,8 +882,8 @@ export default function App() {
               </div>
             </div>
             <div className="flex items-baseline gap-2 mb-3 relative z-10">
-              <span className="text-3xl font-black text-slate-900">{userExtractions}</span>
-              <span className="text-slate-500 text-sm font-medium">/ {maxUserExtractions}</span>
+              <span className="text-2xl font-black text-slate-900">{userExtractions}</span>
+              <span className="text-slate-500 text-xs font-medium">/ {maxUserExtractions}</span>
             </div>
             <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden relative z-10">
               <div 
@@ -866,7 +902,7 @@ export default function App() {
               </div>
             </div>
             <div className="relative z-10">
-              <p className="text-xl font-bold text-slate-900 mb-0.5 truncate">{user.displayName || 'Connecté'}</p>
+              <p className="text-lg font-bold text-slate-900 mb-0.5 truncate">{user.displayName || 'Connecté'}</p>
               <p className="text-xs font-medium text-slate-500 truncate">{user.email}</p>
             </div>
           </div>
@@ -880,7 +916,7 @@ export default function App() {
               </div>
             </div>
             <div className="relative z-10">
-              <p className="text-xl font-bold text-slate-900 mb-0.5">Gemini 1.5</p>
+              <p className="text-lg font-bold text-slate-900 mb-0.5">Gemini 1.5</p>
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                 <span className="text-xs font-medium text-slate-500">Actif</span>
@@ -893,17 +929,17 @@ export default function App() {
       {/* Main Analysis Logic */}
       <div className="space-y-8">
         {!pageData && (location.pathname === '/' || location.pathname === '/analysis') && (
-          <section className="relative overflow-hidden rounded-3xl bg-slate-900 text-white shadow-2xl border border-slate-800 p-6 sm:p-10 lg:p-12">
+          <section className="relative overflow-hidden rounded-2xl bg-slate-900 text-white shadow-2xl border border-slate-800 p-5 sm:p-8 lg:p-10">
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-indigo-500/20 blur-[100px] rounded-full pointer-events-none"></div>
             <div className="relative z-10 max-w-3xl mx-auto text-center space-y-6">
               <motion.h1 
                 initial={{ opacity: 0, y: 20 }} 
                 animate={{ opacity: 1, y: 0 }} 
-                className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight"
+                className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight"
               >
                 Analysez les liens de <br/><span className="text-indigo-400">n'importe quelle URL</span>
               </motion.h1>
-              <p className="text-lg text-slate-300 max-w-2xl mx-auto">
+              <p className="text-base text-slate-300 max-w-2xl mx-auto">
                 Outil gratuit pour extraire les liens d'une page web et obtenir un diagnostic IA complet de votre structure.
               </p>
               
@@ -943,9 +979,9 @@ export default function App() {
 
         {pageData && (
           <div className="space-y-8">
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col sm:flex-row gap-6 justify-between items-center">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 sm:p-5 flex flex-col sm:flex-row gap-6 justify-between items-center">
               <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-xl text-slate-900 truncate">{pageData.title}</h3>
+                <h3 className="font-bold text-lg text-slate-900 truncate">{pageData.title}</h3>
                 <p className="text-sm text-slate-500 mt-1 line-clamp-1">{url}</p>
                 <div className="flex gap-2 mt-3">
                   <span className="bg-slate-100 px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-600">{pageData.links.length} liens</span>
@@ -973,28 +1009,28 @@ export default function App() {
 
             {aiAnalysis && (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-                <div className="bg-slate-900 rounded-3xl p-8 text-white shadow-xl flex flex-col md:flex-row gap-8 items-center border border-slate-800">
+                <div className="bg-slate-900 rounded-xl sm:rounded-2xl p-4 sm:p-6 text-white shadow-xl flex flex-col md:flex-row gap-6 sm:gap-8 items-center border border-slate-800">
                   <div className="flex-1 text-center md:text-left">
-                    <h2 className="text-3xl font-black mb-4">Diagnostic IA : {aiAnalysis.score_global}/100</h2>
-                    <p className="text-indigo-200 italic opacity-90 text-lg">"{aiAnalysis.main_message}"</p>
+                    <h2 className="text-lg sm:text-xl lg:text-2xl font-black mb-2 sm:mb-4">Diagnostic IA : {aiAnalysis.score_global}/100</h2>
+                    <p className="text-indigo-200 italic opacity-90 text-xs sm:text-sm lg:text-base leading-relaxed">"{aiAnalysis.main_message}"</p>
                   </div>
-                  <div className="grid grid-cols-3 gap-6">
-                    <div className="text-center"><span className="block text-2xl font-bold">{aiAnalysis.scores.structure}</span><span className="text-[10px] uppercase font-bold opacity-50">Structure</span></div>
-                    <div className="text-center"><span className="block text-2xl font-bold">{aiAnalysis.scores.conversion}</span><span className="text-[10px] uppercase font-bold opacity-50">Conversion</span></div>
-                    <div className="text-center"><span className="block text-2xl font-bold">{aiAnalysis.scores.presence}</span><span className="text-[10px] uppercase font-bold opacity-50">Présence</span></div>
+                  <div className="grid grid-cols-3 gap-4 sm:gap-6 w-full md:w-auto border-t border-white/10 md:border-t-0 pt-6 md:pt-0">
+                    <div className="text-center"><span className="block text-xl sm:text-2xl font-bold">{aiAnalysis.scores.structure}</span><span className="text-[9px] sm:text-[10px] uppercase font-bold opacity-50">Structure</span></div>
+                    <div className="text-center"><span className="block text-xl sm:text-2xl font-bold">{aiAnalysis.scores.conversion}</span><span className="text-[9px] sm:text-[10px] uppercase font-bold opacity-50">Conversion</span></div>
+                    <div className="text-center"><span className="block text-xl sm:text-2xl font-bold">{aiAnalysis.scores.presence}</span><span className="text-[9px] sm:text-[10px] uppercase font-bold opacity-50">Présence</span></div>
                   </div>
                 </div>
                 <div className="grid md:grid-cols-2 gap-6">
-                  <div className="bg-white rounded-xl border border-red-100 p-6">
-                    <h4 className="font-bold mb-4 flex items-center gap-2 text-red-600"><AlertCircle className="w-4 h-4" /> Points de friction</h4>
+                  <div className="bg-white rounded-lg border border-red-100 p-4">
+                    <h4 className="font-bold mb-4 flex items-center gap-2 text-red-600 text-sm"><AlertCircle className="w-4 h-4" /> Points de friction</h4>
                     <ul className="space-y-3">
                       {aiAnalysis.problems.map((p, i) => (
                         <li key={i}><span className="font-semibold text-slate-800 text-sm">{p.title}</span><p className="text-slate-500 text-xs mt-1">{p.impact}</p></li>
                       ))}
                     </ul>
                   </div>
-                  <div className="bg-white rounded-xl border border-emerald-100 p-6">
-                    <h4 className="font-bold mb-4 flex items-center gap-2 text-emerald-600"><Sparkles className="w-4 h-4" /> Opportunités</h4>
+                  <div className="bg-white rounded-lg border border-emerald-100 p-4">
+                    <h4 className="font-bold mb-4 flex items-center gap-2 text-emerald-600 text-sm"><Sparkles className="w-4 h-4" /> Opportunités</h4>
                     <ul className="space-y-3">
                       {aiAnalysis.opportunities.map((o, i) => (
                         <li key={i} className="text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500" />{o}</li>
@@ -1038,11 +1074,81 @@ export default function App() {
   );
 
   return (
-    <div className={cn("min-h-screen bg-slate-50 text-slate-900 font-sans", isDashboardView ? "flex" : "")}>
+    <div className={cn("min-h-screen bg-slate-50 text-slate-900 font-sans", isDashboardView ? "flex flex-col md:flex-row" : "flex flex-col")}>
       <Helmet>
         <title>ExtracteurIA | Audit SEO & Link Extractor AI</title>
         <meta name="description" content="Outil gratuit pour extraire les liens d'une URL et obtenir un diagnostic IA complet." />
       </Helmet>
+
+      {/* Mobile Menu Overlay */}
+      <AnimatePresence>
+        {isMobileMenuOpen && isDashboardView && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[40] md:hidden"
+            />
+            <motion.aside 
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed inset-y-0 left-0 w-[280px] bg-white shadow-2xl z-[50] md:hidden flex flex-col"
+            >
+              <div className="h-16 flex items-center justify-between px-6 border-b border-slate-200">
+                <div className="flex items-center">
+                  <div className="bg-indigo-600 p-1.5 rounded-lg text-white mr-3"><LinkIcon className="w-5 h-5" /></div>
+                  <h1 className="font-bold text-lg tracking-tight">Extracteur<span className="text-indigo-600">IA</span></h1>
+                </div>
+                <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-lg">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              <nav className="flex-1 p-4 space-y-1">
+                {[
+                  { to: "/", icon: LayoutGrid, label: "Dashboard" },
+                  { to: "/history", icon: History, label: "Historique" },
+                  { to: "/admin", icon: ShieldAlert, label: "Administration", adminOnly: true },
+                  { to: "/docs", icon: BookOpen, label: "Documentation" }
+                ].map((item) => (
+                  (!item.adminOnly || isAdmin) && (
+                    <Link 
+                      key={item.to}
+                      to={item.to} 
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={cn(
+                        "flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-all text-sm",
+                        location.pathname === item.to ? "bg-indigo-50 text-indigo-700 shadow-sm" : "text-slate-600 hover:bg-slate-50"
+                      )}
+                    >
+                      <item.icon className="w-5 h-5" /> {item.label}
+                    </Link>
+                  )
+                ))}
+              </nav>
+              <div className="p-4 border-t border-slate-200">
+                <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                  {user?.photoURL ? (
+                    <img src={user.photoURL} className="w-10 h-10 rounded-full border border-white shadow-sm" alt="profile"/>
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center font-bold text-indigo-600">{user?.email?.[0].toUpperCase()}</div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold truncate text-slate-900">{user?.displayName || 'Utilisateur'}</p>
+                    <p className="text-[10px] text-slate-500 truncate">{user?.email}</p>
+                  </div>
+                  <button onClick={handleLogout} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                    <LogOut className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Sidebar (Desktop - Only for Auth Users) */}
       {isDashboardView && (
@@ -1069,14 +1175,14 @@ export default function App() {
           </nav>
           <div className="p-4 border-t border-slate-200">
             <div className="flex items-center gap-3 p-2 rounded-xl bg-slate-50 border border-slate-100">
-              {user.photoURL ? (
+              {user?.photoURL ? (
                 <img src={user.photoURL} className="w-10 h-10 rounded-full border border-white shadow-sm" alt="profile"/>
               ) : (
-                <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center font-bold text-indigo-600">{user.email?.[0].toUpperCase()}</div>
+                <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center font-bold text-indigo-600">{user?.email?.[0].toUpperCase()}</div>
               )}
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold truncate text-slate-900">{user.displayName || 'Utilisateur'}</p>
-                <p className="text-[10px] text-slate-500 truncate">{user.email}</p>
+                <p className="text-xs font-bold truncate text-slate-900">{user?.displayName || 'Utilisateur'}</p>
+                <p className="text-[10px] text-slate-500 truncate">{user?.email}</p>
               </div>
               <button onClick={handleLogout} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
                 <LogOut className="w-4 h-4" />
@@ -1091,6 +1197,11 @@ export default function App() {
         <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-30">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 h-full flex items-center justify-between">
             <div className="flex items-center gap-2">
+              {isDashboardView && (
+                <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                  <Menu className="w-6 h-6" />
+                </button>
+              )}
               {!isDashboardView && (
                 <>
                   <div className="bg-indigo-600 p-1.5 rounded-lg text-white"><LinkIcon className="w-5 h-5" /></div>
@@ -1098,25 +1209,30 @@ export default function App() {
                 </>
               )}
               {isDashboardView && (
-                <div className="md:hidden flex items-center gap-2">
-                  <div className="bg-indigo-600 p-1 rounded-lg text-white"><LinkIcon className="w-5 h-5" /></div>
-                  <span className="font-bold">ExtracteurIA</span>
+                <div className="flex items-center gap-2">
+                  <div className="bg-indigo-600 p-1 rounded-lg text-white md:hidden"><LinkIcon className="w-5 h-5" /></div>
+                  <span className="font-bold md:text-lg">
+                    {location.pathname === '/' ? 'Dashboard' : 
+                     location.pathname === '/history' ? 'Historique' :
+                     location.pathname === '/admin' ? 'Admin' :
+                     location.pathname === '/docs' ? 'Documentation' : 'ExtracteurIA'}
+                  </span>
                 </div>
               )}
             </div>
             
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               {isAuthReady && (!user || user.isAnonymous) ? (
                 <button 
                   onClick={handleLogin} 
-                  className="px-5 py-2 bg-slate-900 text-white font-bold rounded-xl text-sm hover:bg-slate-800 transition-all shadow-md active:scale-95"
+                  className="px-4 sm:px-5 py-2 bg-slate-900 text-white font-bold rounded-xl text-xs sm:text-sm hover:bg-slate-800 transition-all shadow-md active:scale-95 whitespace-nowrap"
                 >
                   Se connecter
                 </button>
               ) : (
-                <div className="flex items-center gap-2 bg-indigo-50 px-3 py-1.5 rounded-full text-indigo-700 text-xs font-bold border border-indigo-100">
-                  <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
-                  Quota : {userExtractions}/{maxUserExtractions}
+                <div className="flex items-center gap-2 bg-indigo-50 px-2 sm:px-3 py-1.5 rounded-full text-indigo-700 text-[10px] sm:text-xs font-bold border border-indigo-100">
+                  <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-indigo-500 animate-pulse" />
+                  <span className="hidden xs:inline">Quota :</span> {userExtractions}/{maxUserExtractions}
                 </div>
               )}
             </div>
@@ -1175,6 +1291,52 @@ export default function App() {
             </motion.div>
           </div>
         )}
+        {showConsent && (
+          <motion.div 
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-4 left-4 right-4 z-[200] md:left-auto md:max-w-md"
+          >
+            <div className="bg-slate-900 text-white p-4 sm:p-5 rounded-2xl shadow-2xl border border-slate-700 backdrop-blur-xl bg-opacity-95 flex flex-col gap-4">
+              <div className="flex items-start gap-3">
+                <div className="bg-indigo-500/20 p-2 rounded-lg text-indigo-400 shrink-0">
+                  <ShieldAlert className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm">Consentement aux données</h4>
+                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                    Ce site a besoin de votre consentement pour utiliser vos données. Nous utilisons des cookies pour améliorer votre expérience et analyser notre trafic.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => { 
+                    setCookie('cookie_consent', 'true', 365); 
+                    setShowConsent(false);
+                    // Update GA consent
+                    if ((window as any).gtag) {
+                      (window as any).gtag('consent', 'update', {
+                        'ad_storage': 'granted',
+                        'analytics_storage': 'granted'
+                      });
+                    }
+                  }}
+                  className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition-all"
+                >
+                  Accepter
+                </button>
+                <button 
+                  onClick={() => setShowConsent(false)}
+                  className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition-all"
+                >
+                  Plus tard
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );
@@ -1200,15 +1362,17 @@ function LinkList({ links, viewMode }: { links: ExtractedLink[], viewMode: 'list
   return (
     <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100 overflow-hidden shadow-sm">
       {links.map((link, i) => (
-        <a key={i} href={link.href} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-4 hover:bg-slate-50 group transition-colors">
-          <div className="flex items-center gap-4 min-w-0">
-            <div className="bg-slate-100 p-2 rounded-lg group-hover:bg-indigo-100 text-slate-500 group-hover:text-indigo-600 transition-colors"><LinkIcon className="w-4 h-4" /></div>
-            <div className="min-w-0">
-              <p className="font-semibold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">{link.text || 'Lien sans texte'}</p>
-              <p className="text-xs text-slate-400 truncate">{link.href}</p>
+        <a key={i} href={link.href} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-3 sm:p-4 hover:bg-slate-50 group transition-colors min-w-0">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+            <div className="bg-slate-100 p-2 rounded-lg group-hover:bg-indigo-100 text-slate-500 group-hover:text-indigo-600 transition-colors shrink-0">
+              <LinkIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-slate-900 truncate group-hover:text-indigo-600 transition-colors text-sm sm:text-base">{link.text || 'Lien sans texte'}</p>
+              <p className="text-[10px] sm:text-xs text-slate-400 truncate mt-0.5">{link.href}</p>
             </div>
           </div>
-          {link.isExternal && <ExternalLink className="w-4 h-4 text-slate-200 ml-4" />}
+          {link.isExternal && <ExternalLink className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-200 ml-3 sm:ml-4 shrink-0" />}
         </a>
       ))}
     </div>

@@ -128,7 +128,7 @@ export function AdminView({
         <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
           <Settings className="w-5 h-5" />
         </div>
-        <h2 className="text-xl font-bold text-slate-900">Administration</h2>
+        <h2 className="text-lg font-bold text-slate-900">Administration</h2>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -136,9 +136,9 @@ export function AdminView({
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 shadow-sm"
+          className="bg-white rounded-lg border border-slate-200 p-4 sm:p-5 shadow-sm"
         >
-          <h3 className="text-lg font-bold text-slate-900 mb-5 flex items-center gap-2">
+          <h3 className="text-base font-bold text-slate-900 mb-5 flex items-center gap-2">
             <Settings className="w-4 h-4 text-indigo-500" />
             Paramètres globaux
           </h3>
@@ -235,7 +235,7 @@ export function AdminView({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 shadow-sm flex flex-col gap-6"
+          className="bg-white rounded-lg border border-slate-200 p-4 sm:p-5 shadow-sm flex flex-col gap-6"
         >
           <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
             <Database className="w-4 h-4 text-indigo-500" />
@@ -262,10 +262,10 @@ export function AdminView({
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
-        className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden"
+        className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden"
       >
         <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-          <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <Users className="w-4 h-4 text-indigo-500" />
             Liste des utilisateurs
           </h3>
@@ -279,7 +279,7 @@ export function AdminView({
             </button>
           )}
         </div>
-        <div className="overflow-x-auto">
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-sm text-slate-600">
             <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
               <tr>
@@ -327,11 +327,40 @@ export function AdminView({
               ))}
               {usersWithEmail.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500">Aucun utilisateur trouvé.</td>
+                  <td colSpan={7} className="px-6 py-8 text-center text-slate-500">Aucun utilisateur trouvé.</td>
                 </tr>
               )}
             </tbody>
           </table>
+        </div>
+        
+        {/* Mobile View for Users */}
+        <div className="md:hidden divide-y divide-slate-100">
+          {usersWithEmail.map(u => (
+            <div key={u.id} className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <button onClick={() => toggleUserSelect(u.id)} className={selectedUsers.includes(u.id) ? 'text-indigo-600' : 'text-slate-300'}>
+                    {selectedUsers.includes(u.id) ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                  </button>
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-900 truncate">{u.email}</p>
+                    <p className="text-xs text-slate-500">{u.displayName || 'Sans nom'}</p>
+                  </div>
+                </div>
+                <button onClick={() => setConfirmDelete({ type: 'user', ids: [u.id] })} className="p-2 text-red-500">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="flex items-center justify-between text-xs font-medium">
+                <span className={`px-2 py-0.5 rounded-full ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-700'}`}>
+                  {u.role || 'user'}
+                </span>
+                <span className="text-slate-500">{u.extractionCount || 0} extractions</span>
+              </div>
+            </div>
+          ))}
+          {usersWithEmail.length === 0 && <div className="p-8 text-center text-slate-500 text-sm">Aucun utilisateur trouvé.</div>}
         </div>
       </motion.div>
 
@@ -340,10 +369,10 @@ export function AdminView({
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
-        className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden"
+        className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden"
       >
         <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-          <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <History className="w-4 h-4 text-indigo-500" />
             Historique complet des analyses
           </h3>
@@ -357,7 +386,7 @@ export function AdminView({
             </button>
           )}
         </div>
-        <div className="overflow-x-auto">
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-sm text-slate-600">
             <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
               <tr>
@@ -418,6 +447,48 @@ export function AdminView({
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile View for History */}
+        <div className="md:hidden divide-y divide-slate-100">
+          {allHistory.map(h => (
+            <div key={h.id} className="p-4 space-y-3">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-3 min-w-0">
+                  <button onClick={() => toggleHistorySelect(h.id)} className={`mt-1 ${selectedHistory.includes(h.id) ? 'text-indigo-600' : 'text-slate-300'}`}>
+                    {selectedHistory.includes(h.id) ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                  </button>
+                  <div className="min-w-0">
+                    <a href={h.url} target="_blank" rel="noopener noreferrer" className="font-bold text-slate-900 truncate block hover:text-indigo-600">
+                      {new URL(h.url).hostname}
+                    </a>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      {h.createdAt ? new Date(h.createdAt.toDate ? h.createdAt.toDate() : h.createdAt).toLocaleDateString('fr-FR') : 'N/A'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  {h.ai?.scoreGlobal !== undefined ? (
+                    <span className={`text-lg font-black ${(h.ai.scoreGlobal || 0) >= 70 ? 'text-emerald-500' : (h.ai.scoreGlobal || 0) >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
+                      {h.ai.scoreGlobal}
+                    </span>
+                  ) : (
+                    <button onClick={() => onScore(h)} className="text-indigo-600"><Sparkles className="w-4 h-4" /></button>
+                  )}
+                  <button onClick={() => setConfirmDelete({ type: 'history', ids: [h.id] })} className="p-1 text-red-500">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${h.isAnonymous ? 'bg-amber-50 text-amber-600 border border-amber-100' : 'bg-indigo-50 text-indigo-600 border border-indigo-100'}`}>
+                  {h.isAnonymous ? 'Anon' : (h.userId?.slice(0, 8) || 'User')}
+                </span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{h.ai?.businessType || 'N/A'}</span>
+              </div>
+            </div>
+          ))}
+          {allHistory.length === 0 && <div className="p-8 text-center text-slate-500 text-sm">Aucun historique trouvé.</div>}
         </div>
       </motion.div>
 
