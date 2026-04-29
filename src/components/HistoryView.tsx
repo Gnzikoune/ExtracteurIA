@@ -71,18 +71,18 @@ export function HistoryView({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-white/50 backdrop-blur-md p-4 rounded-2xl border border-slate-200/50 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-white/50 backdrop-blur-md p-3 rounded-xl border border-slate-200/50 shadow-sm">
         <div>
-          <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-3">
-            <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-2 rounded-xl text-white shadow-md shadow-indigo-200">
-              <BarChart2 className="w-5 h-5" />
+          <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 flex items-center gap-2 sm:gap-3">
+            <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-1.5 sm:p-2 rounded-lg text-white shadow-md shadow-indigo-200">
+              <BarChart2 className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            Historique des analyses
-            <span className="text-sm font-bold bg-indigo-100 text-indigo-700 px-2.5 py-0.5 rounded-full">
+            Historique
+            <span className="text-xs font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
               {history.length}
             </span>
           </h2>
-          <p className="text-sm text-slate-500 mt-2 ml-12">Retrouvez et gérez vos anciens diagnostics IA.</p>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1 sm:mt-2 ml-10 sm:ml-12">Gérez vos anciens diagnostics IA.</p>
         </div>
         
         <div className="flex items-center gap-2 md:ml-0 ml-12">
@@ -121,14 +121,14 @@ export function HistoryView({
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.05 }}
-              className={`group relative flex flex-col md:flex-row gap-4 justify-between items-start md:items-center p-5 rounded-2xl border transition-all duration-300 ${
+              className={`group relative flex flex-col md:flex-row gap-4 justify-between items-start md:items-center p-4 rounded-xl border transition-all duration-300 ${
                 isSelected 
                   ? 'border-indigo-400 bg-indigo-50/50 shadow-md shadow-indigo-100' 
                   : 'bg-white/80 backdrop-blur-xl border-slate-200/80 shadow-sm hover:shadow-xl hover:shadow-indigo-500/5 hover:-translate-y-1 hover:border-indigo-200'
               }`}
             >
               {/* Subtle background glow on hover */}
-              <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/0 to-indigo-500/5 opacity-0 group-hover:opacity-100 rounded-2xl transition-opacity duration-500 pointer-events-none"></div>
+              <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/0 to-indigo-500/5 opacity-0 group-hover:opacity-100 rounded-xl transition-opacity duration-500 pointer-events-none"></div>
 
               <div className="flex items-start gap-4 relative z-10 w-full md:w-auto">
                 <button 
@@ -143,7 +143,7 @@ export function HistoryView({
                     <div className={`p-1.5 rounded-lg ${hasScore ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500'}`}>
                       <Globe className="w-4 h-4" />
                     </div>
-                    <a href={item.url} target="_blank" rel="noopener noreferrer" className="font-bold text-slate-900 hover:text-indigo-600 transition-colors flex items-center gap-1.5 text-base sm:text-lg truncate max-w-[200px] sm:max-w-sm md:max-w-md">
+                    <a href={item.url} target="_blank" rel="noopener noreferrer" className="font-bold text-slate-900 hover:text-indigo-600 transition-colors flex items-center gap-1.5 text-sm sm:text-base truncate max-w-[200px] sm:max-w-sm md:max-w-md">
                       {new URL(item.url).hostname}
                       <ExternalLink className="w-3 h-3 shrink-0 text-slate-400" />
                     </a>

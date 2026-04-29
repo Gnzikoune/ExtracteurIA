@@ -146,16 +146,16 @@ export function DocumentationView({
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       
       {/* Header */}
-      <div className="relative overflow-hidden rounded-[2rem] bg-slate-900 text-white p-10 md:p-14 shadow-2xl border border-slate-800">
+      <div className="relative overflow-hidden rounded-xl sm:rounded-2xl bg-slate-900 text-white p-5 sm:p-8 md:p-10 shadow-2xl border border-slate-800">
         <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-indigo-500/20 blur-[80px] rounded-full -mr-20 -mt-20 pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-purple-500/20 blur-[80px] rounded-full -ml-20 -mb-20 pointer-events-none"></div>
         
         <div className="relative z-10 text-center space-y-4">
-          <div className="w-16 h-16 bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl">
-            <BookOpen className="w-8 h-8 text-indigo-300" />
+          <div className="w-12 h-12 sm:w-16 sm:h-16 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl flex items-center justify-center mx-auto mb-4 sm:mb-6 shadow-xl">
+            <BookOpen className="w-6 h-6 sm:w-8 sm:h-8 text-indigo-300" />
           </div>
-          <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight">Documentation technique</h1>
-          <p className="text-lg text-slate-300 max-w-2xl mx-auto leading-relaxed">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight">Documentation technique</h1>
+          <p className="text-xs sm:text-base text-slate-300 max-w-2xl mx-auto leading-relaxed">
             Découvrez toutes les capacités d'ExtracteurIA. Apprenez à exploiter notre moteur d'exploration et notre intelligence artificielle pour auditer vos sites web.
           </p>
         </div>
@@ -169,16 +169,16 @@ export function DocumentationView({
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
-            className="bg-white/80 backdrop-blur-xl rounded-[2rem] border border-slate-200/60 p-6 md:p-10 shadow-sm relative overflow-hidden group hover:shadow-xl hover:shadow-indigo-500/5 transition-all duration-500"
+            className="bg-white/80 backdrop-blur-xl rounded-2xl border border-slate-200/60 p-5 md:p-8 shadow-sm relative overflow-hidden group hover:shadow-xl hover:shadow-indigo-500/5 transition-all duration-500"
           >
             <div className={`absolute top-0 right-0 w-32 h-32 opacity-30 blur-3xl -mr-10 -mt-10 rounded-full ${section.bgLight} transition-transform duration-700 group-hover:scale-150`}></div>
             
             <div className="relative z-10">
               <div className="flex items-center gap-4 mb-6">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner ${section.bgLight} border border-white`}>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-inner ${section.bgLight} border border-white`}>
                   {section.icon}
                 </div>
-                <h2 className="text-2xl font-bold text-slate-900">{section.title}</h2>
+                <h2 className="text-lg font-bold text-slate-900">{section.title}</h2>
               </div>
               
               {section.content}
