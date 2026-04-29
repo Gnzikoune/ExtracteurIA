@@ -13,6 +13,7 @@ import { doc, getDoc, setDoc, onSnapshot, collection, addDoc, query, orderBy, ge
 import { HistoryView } from './components/HistoryView';
 import { AdminView } from './components/AdminView';
 import { DocumentationView } from './components/DocumentationView';
+import { logEvent } from './utils/analytics';
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
@@ -171,6 +172,16 @@ export default function App() {
       }
     }
   }, []);
+
+  useEffect(() => {
+    // Log page view on path change
+    logEvent('page_view', { 
+      path: location.pathname, 
+      userId: user?.uid, 
+      isAnonymous: user?.isAnonymous,
+      persistentId: persistentId || undefined
+    });
+  }, [location.pathname, persistentId]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -563,9 +574,16 @@ export default function App() {
             }, { merge: true });
           }
 
-          setUserExtractions(newCount);
+      setUserExtractions(newCount);
+      
+      logEvent('extraction_completed', { 
+        url: normalizedUrl, 
+        linksCount: links.length, 
+        userId: user.uid,
+        isAnonymous: user.isAnonymous
+      });
 
-          // Save extraction history
+      // Save extraction history
           await addDoc(collection(db, 'users', user.uid, 'extractions'), {
             url: normalizedUrl.substring(0, 1999),
             title: (data.title || '').substring(0, 999),
@@ -580,6 +598,7 @@ export default function App() {
       }
     } catch (err: any) {
       setError(err.message || 'Une erreur inattendue est survenue');
+      logEvent('extraction_failed', { url: url, error: err.message });
     } finally {
       setIsLoading(false);
     }
@@ -594,6 +613,7 @@ export default function App() {
 
     setIsAnalyzing(true);
     setAiError(null);
+    logEvent('analysis_started', { url: activeUrl });
 
     try {
       const apiKey = geminiApiKey || process.env.GEMINI_API_KEY;
@@ -1315,6 +1335,7 @@ export default function App() {
                   onClick={() => { 
                     setCookie('cookie_consent', 'true', 365); 
                     setShowConsent(false);
+                    logEvent('consent_accepted', { persistentId: persistentId || undefined });
                     // Update GA consent
                     if ((window as any).gtag) {
                       (window as any).gtag('consent', 'update', {
