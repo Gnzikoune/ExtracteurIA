@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Routes, Route, useNavigate, useLocation, Link, Navigate } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { Search, Link as LinkIcon, ExternalLink, Loader2, Sparkles, AlertCircle, LayoutGrid, List as ListIcon, LogOut, User as UserIcon, CheckCircle2, XCircle, ArrowRight, ArrowLeft, Rocket, FileJson, FileSpreadsheet, History, ShieldAlert, BookOpen } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { motion, AnimatePresence } from 'motion/react';
@@ -61,13 +63,30 @@ export default function App() {
   const [showQuotaModal, setShowQuotaModal] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [persistentId, setPersistentId] = useState<string | null>(null);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'history' | 'admin' | 'analysis' | 'documentation'>('dashboard');
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Derived view from URL for backward compatibility with conditional rendering logic
+  let currentView: 'dashboard' | 'history' | 'admin' | 'analysis' | 'documentation' = 'dashboard';
+  if (location.pathname === '/history') currentView = 'history';
+  else if (location.pathname === '/admin') currentView = 'admin';
+  else if (location.pathname === '/docs') currentView = 'documentation';
+  else if (location.pathname === '/analysis') currentView = 'analysis';
+
+  const setCurrentView = (view: string) => {
+    if (view === 'dashboard') navigate('/');
+    else if (view === 'history') navigate('/history');
+    else if (view === 'admin') navigate('/admin');
+    else if (view === 'documentation') navigate('/docs');
+    else if (view === 'analysis') navigate('/analysis');
+  };
 
   // Auth & Usage State
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [userExtractions, setUserExtractions] = useState(0);
   const [isAdmin, setIsAdmin] = useState(false);
+  const isDashboardView = isAuthReady && user && !user.isAnonymous;
 
   // Settings State
   const [maxAnonExtractions, setMaxAnonExtractions] = useState(2);
@@ -812,1104 +831,386 @@ export default function App() {
     URL.revokeObjectURL(urlObj);
   };
 
-  const isDashboardView = isAuthReady && user && !user.isAnonymous;
+  const renderMainContent = () => (
+    <>
 
-  return (
-    <div className={cn("min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-indigo-100 selection:text-indigo-900", isDashboardView ? "flex" : "")}>
-      
-      {/* Sidebar (Desktop) */}
-      {isDashboardView && (
-        <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col fixed inset-y-0 z-20">
-        <div className="h-16 flex items-center px-6 border-b border-slate-200">
-          <div className="bg-indigo-600 p-1.5 rounded-lg text-white mr-3">
-            <LinkIcon className="w-5 h-5" />
-          </div>
-          <h1 className="font-semibold text-lg tracking-tight">Extracteur</h1>
-        </div>
-        
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-          <button 
-            onClick={() => setCurrentView('dashboard')}
-            className={cn("w-full px-3 py-2.5 rounded-lg font-medium flex items-center gap-3 transition-colors", currentView === 'dashboard' ? "bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900")}
-          >
-            <LayoutGrid className="w-5 h-5" />
-            Tableau de bord
-          </button>
-          
-          {user && !user.isAnonymous && (
-            <button 
-              onClick={() => setCurrentView('history')}
-              className={cn("w-full px-3 py-2.5 rounded-lg font-medium flex items-center gap-3 transition-colors", currentView === 'history' ? "bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900")}
-            >
-              <History className="w-5 h-5" />
-              Historique
-            </button>
-          )}
-
-          {isAdmin && (
-            <button 
-              onClick={() => setCurrentView('admin')}
-              className={cn("w-full px-3 py-2.5 rounded-lg font-medium flex items-center gap-3 transition-colors", currentView === 'admin' ? "bg-purple-50 text-purple-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900")}
-            >
-              <ShieldAlert className="w-5 h-5" />
-              Administration
-            </button>
-          )}
-
-          <button 
-            onClick={() => setCurrentView('documentation')}
-            className={cn("w-full px-3 py-2.5 rounded-lg font-medium flex items-center gap-3 transition-colors", currentView === 'documentation' ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900")}
-          >
-            <BookOpen className="w-5 h-5" />
-            Documentation
-          </button>
-        </nav>
-
-        {/* User Profile in Sidebar */}
-        <div className="p-4 border-t border-slate-200">
-          {isAuthReady ? (
-            user && !user.isAnonymous ? (
-              <div className="flex items-center gap-3">
-                {user.photoURL ? (
-                  <img src={user.photoURL} alt="Profile" className="w-10 h-10 rounded-full border border-slate-200" referrerPolicy="no-referrer" />
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
-                    {user.email?.[0].toUpperCase() || 'U'}
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-900 truncate">{user.displayName || 'Utilisateur'}</p>
-                  <p className="text-xs text-slate-500 truncate">{user.email}</p>
-                </div>
-                <button 
-                  onClick={handleLogout}
-                  className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                  title="Se déconnecter"
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
+      {/* Top Dashboard Stats */}
+      {isAuthReady && user && !user.isAnonymous && location.pathname === '/' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-8">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-100 rounded-full blur-2xl -mr-10 -mt-10 transition-transform group-hover:scale-110"></div>
+            <div className="flex items-center justify-between mb-4 relative z-10">
+              <h3 className="font-semibold text-slate-600 text-sm">Extractions utilisées</h3>
+              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                <Sparkles className="w-5 h-5" />
               </div>
-            ) : (
-              <div className="text-center">
-                <p className="text-sm text-slate-500 mb-3">Mode gratuit ({userExtractions}/{maxAnonExtractions})</p>
-                <button 
-                  onClick={handleLogin}
-                  className="w-full px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-medium rounded-lg transition-colors text-sm"
-                >
-                  Se connecter
-                </button>
-              </div>
-            )
-          ) : (
-            <div className="flex items-center justify-center gap-2 text-slate-500 py-2">
-              <Loader2 className="w-4 h-4 animate-spin" />
             </div>
-          )}
+            <div className="flex items-baseline gap-2 mb-3 relative z-10">
+              <span className="text-3xl font-black text-slate-900">{userExtractions}</span>
+              <span className="text-slate-500 text-sm font-medium">/ {maxUserExtractions}</span>
+            </div>
+            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden relative z-10">
+              <div 
+                className={cn("h-full rounded-full transition-all", userExtractions >= maxUserExtractions ? "bg-red-500" : "bg-indigo-600")}
+                style={{ width: `${Math.min((userExtractions / maxUserExtractions) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-100 rounded-full blur-2xl -mr-10 -mt-10 transition-transform group-hover:scale-110"></div>
+            <div className="flex items-center justify-between mb-4 relative z-10">
+              <h3 className="font-semibold text-slate-600 text-sm">Compte</h3>
+              <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                <UserIcon className="w-5 h-5" />
+              </div>
+            </div>
+            <div className="relative z-10">
+              <p className="text-xl font-bold text-slate-900 mb-0.5 truncate">{user.displayName || 'Connecté'}</p>
+              <p className="text-xs font-medium text-slate-500 truncate">{user.email}</p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-blue-100 rounded-full blur-2xl -mr-10 -mt-10 transition-transform group-hover:scale-110"></div>
+            <div className="flex items-center justify-between mb-4 relative z-10">
+              <h3 className="font-semibold text-slate-600 text-sm">IA Moteur</h3>
+              <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                <Rocket className="w-5 h-5" />
+              </div>
+            </div>
+            <div className="relative z-10">
+              <p className="text-xl font-bold text-slate-900 mb-0.5">Gemini 1.5</p>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span className="text-xs font-medium text-slate-500">Actif</span>
+              </div>
+            </div>
+          </div>
         </div>
-      </aside>
       )}
 
-      {/* Main Content */}
-      <div className={cn("flex-1 flex flex-col min-w-0", isDashboardView ? "md:ml-64" : "")}>
-        {/* Header */}
-        {isDashboardView ? (
-          <header className="md:hidden bg-white border-b border-slate-200 sticky top-0 z-10">
-            <div className="px-4 h-16 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="bg-indigo-600 p-1.5 rounded-lg text-white">
-                  <LinkIcon className="w-5 h-5" />
-                </div>
-                <h1 className="font-semibold text-lg tracking-tight">Extracteur</h1>
-              </div>
-              {isAuthReady && user && !user.isAnonymous && (
-                <div className="flex items-center gap-3">
-                  {user.photoURL ? (
-                    <img src={user.photoURL} alt="Profile" className="w-8 h-8 rounded-full border border-slate-200" referrerPolicy="no-referrer" />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm">
-                      {user.email?.[0].toUpperCase() || 'U'}
-                    </div>
-                  )}
-                  <button onClick={handleLogout} className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg">
-                    <LogOut className="w-5 h-5" />
-                  </button>
-                </div>
-              )}
-            </div>
-          </header>
-        ) : (
-          <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200/80 shadow-sm transition-all">
-            <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="bg-gradient-to-br from-indigo-600 to-purple-600 p-2 rounded-xl text-white shadow-lg shadow-indigo-200">
-                  <LinkIcon className="w-5 h-5" />
-                </div>
-                <h1 className="font-bold text-lg tracking-tight text-slate-900">Extracteur<span className="text-indigo-600">IA</span></h1>
-              </div>
-              <div className="flex items-center gap-4 sm:gap-6 text-sm font-medium text-slate-600">
-                <span className="hidden sm:inline-flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full text-slate-600 text-xs font-semibold border border-slate-200">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                  Gratuit : {userExtractions}/{maxAnonExtractions}
-                </span>
-                <button onClick={handleLogin} className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5">
-                  Se connecter
-                </button>
-              </div>
-            </div>
-          </header>
-        )}
-
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto pb-24 md:pb-8">
-          <div className="max-w-6xl mx-auto space-y-8">
-            
-            {/* Top Dashboard Stats */}
-            {currentView === 'dashboard' && isDashboardView && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
-              {/* Stat Card 1: Quota */}
-              <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow border border-slate-200 p-5 sm:p-6 relative overflow-hidden group">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-100 rounded-full blur-2xl -mr-10 -mt-10 transition-transform group-hover:scale-110"></div>
-                <div className="flex items-center justify-between mb-4 relative z-10">
-                  <h3 className="font-semibold text-slate-600 text-sm">Extractions utilisées</h3>
-                  <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
-                    <Sparkles className="w-5 h-5" />
+      {/* Main Analysis Logic */}
+      <div className="space-y-8">
+        {!pageData && (location.pathname === '/' || location.pathname === '/analysis') && (
+          <section className="relative overflow-hidden rounded-3xl bg-slate-900 text-white shadow-2xl border border-slate-800 p-6 sm:p-10 lg:p-12">
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-indigo-500/20 blur-[100px] rounded-full pointer-events-none"></div>
+            <div className="relative z-10 max-w-3xl mx-auto text-center space-y-6">
+              <motion.h1 
+                initial={{ opacity: 0, y: 20 }} 
+                animate={{ opacity: 1, y: 0 }} 
+                className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight"
+              >
+                Analysez les liens de <br/><span className="text-indigo-400">n'importe quelle URL</span>
+              </motion.h1>
+              <p className="text-lg text-slate-300 max-w-2xl mx-auto">
+                Outil gratuit pour extraire les liens d'une page web et obtenir un diagnostic IA complet de votre structure.
+              </p>
+              
+              <form onSubmit={handleExtract} className="mt-8 p-2 bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 shadow-2xl relative flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <Search className="h-5 w-5 text-slate-400" />
                   </div>
-                </div>
-                <div className="flex items-baseline gap-2 mb-3 relative z-10">
-                  <span className="text-3xl font-black text-slate-900">{userExtractions}</span>
-                  <span className="text-slate-500 text-sm font-medium">/ {user && !user.isAnonymous ? maxUserExtractions : maxAnonExtractions}</span>
-                </div>
-                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden relative z-10">
-                  <div 
-                    className={cn("h-full rounded-full transition-all", userExtractions >= (user && !user.isAnonymous ? maxUserExtractions : maxAnonExtractions) ? "bg-red-500" : "bg-gradient-to-r from-indigo-500 to-purple-500")}
-                    style={{ width: `${Math.min((userExtractions / (user && !user.isAnonymous ? maxUserExtractions : maxAnonExtractions)) * 100, 100)}%` }}
+                  <input 
+                    type="url" 
+                    value={url} 
+                    onChange={(e) => setUrl(e.target.value)} 
+                    placeholder="https://exemple.com" 
+                    required 
+                    className="block w-full pl-12 pr-4 py-4 bg-white border-transparent rounded-xl text-slate-900 focus:outline-none focus:ring-4 focus:ring-indigo-500/30" 
                   />
                 </div>
-              </div>
-
-              {/* Stat Card 2: Account Status */}
-              <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow border border-slate-200 p-5 sm:p-6 relative overflow-hidden group">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-100 rounded-full blur-2xl -mr-10 -mt-10 transition-transform group-hover:scale-110"></div>
-                <div className="flex items-center justify-between mb-4 relative z-10">
-                  <h3 className="font-semibold text-slate-600 text-sm">Statut du compte</h3>
-                  <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
-                    <UserIcon className="w-5 h-5" />
-                  </div>
-                </div>
-                {isAuthReady ? (
-                  user && !user.isAnonymous ? (
-                    <div className="relative z-10">
-                      <p className="text-xl font-bold text-slate-900 mb-0.5 truncate" title={user.displayName || 'Connecté'}>
-                        {user.displayName || 'Connecté'}
-                      </p>
-                      <p className="text-xs font-medium text-slate-500 truncate">{user.email}</p>
-                    </div>
-                  ) : (
-                    <div className="relative z-10">
-                      <p className="text-xl font-bold text-slate-900 mb-0.5">Anonyme</p>
-                      <button onClick={handleLogin} className="text-xs text-indigo-600 hover:text-indigo-700 font-semibold mt-0.5 transition-colors">
-                        Créer un compte
-                      </button>
-                    </div>
-                  )
-                ) : (
-                  <div className="animate-pulse flex space-x-4 relative z-10">
-                    <div className="flex-1 space-y-3 py-1">
-                      <div className="h-4 bg-slate-200 rounded w-3/4"></div>
-                      <div className="h-3 bg-slate-200 rounded w-1/2"></div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Stat Card 3: AI Model */}
-              <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow border border-slate-200 p-5 sm:p-6 relative overflow-hidden group">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-blue-100 rounded-full blur-2xl -mr-10 -mt-10 transition-transform group-hover:scale-110"></div>
-                <div className="flex items-center justify-between mb-4 relative z-10">
-                  <h3 className="font-semibold text-slate-600 text-sm">Moteur d'analyse</h3>
-                  <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
-                    <Rocket className="w-5 h-5" />
-                  </div>
-                </div>
-                <div className="relative z-10">
-                  <p className="text-xl font-bold text-slate-900 mb-0.5">Gemini 3</p>
-                  <p className="text-xs font-medium text-slate-500">Flash Preview</p>
-                </div>
-              </div>
-              </div>
-            )}
-            {/* Search Form / Hero Section */}
-            {currentView === 'dashboard' && !isDashboardView ? (
-              <section className="relative overflow-hidden rounded-3xl bg-slate-900 text-white shadow-2xl border border-slate-800 p-6 sm:p-10 lg:p-12 mb-12">
-                {/* Background Glows */}
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-indigo-500/20 blur-[100px] rounded-full pointer-events-none"></div>
-                <div className="absolute bottom-0 right-0 w-[300px] h-[300px] bg-purple-500/10 blur-[80px] rounded-full pointer-events-none"></div>
-                
-                <div className="relative z-10 max-w-3xl mx-auto text-center space-y-6">
-
-                  <motion.h1 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
-                    className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white leading-[1.2]"
-                  >
-                    Extrayez les liens de <br className="hidden sm:block" />
-                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">n'importe quelle URL</span>
-                  </motion.h1>
- 
-                  <motion.p 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                    className="text-base sm:text-lg text-slate-300 leading-relaxed max-w-2xl mx-auto"
-                  >
-                    Vous cherchez un moyen rapide de récupérer tous les liens d'une page web ? Notre outil gratuit vous permet d'extraire chaque lien en quelques secondes et d'obtenir un diagnostic IA complet.
-                  </motion.p>
-                  
-                  <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 }}
-                    className="mt-8 p-1.5 sm:p-2 bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 shadow-2xl"
-                  >
-                    <form onSubmit={handleExtract} className="relative flex flex-col gap-4">
-                      <div className="relative flex items-center">
-                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                          <Search className="h-5 w-5 text-slate-400" />
-                        </div>
-                        <input
-                          type="url"
-                          value={url}
-                          onChange={(e) => setUrl(e.target.value)}
-                          placeholder="https://exemple.com"
-                          required
-                          aria-label="URL du site à analyser"
-                          className="block w-full pl-12 pr-32 py-4 bg-white border border-transparent rounded-xl text-slate-900 text-base placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/30 transition-shadow"
-                        />
-                        <button
-                          type="submit"
-                          aria-label="Lancer l'extraction des liens"
-                          disabled={isLoading || (user?.isAnonymous && userExtractions >= maxAnonExtractions) || (!user?.isAnonymous && userExtractions >= maxUserExtractions)}
-                          className="absolute right-1.5 top-1.5 bottom-1.5 px-5 sm:px-6 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg shadow-indigo-900/20"
-                        >
-                          {isLoading ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              <span className="hidden sm:inline">Analyse...</span>
-                            </>
-                          ) : (
-                            <span className="hidden sm:inline">Diagnostiquer</span>
-                          )}
-                          {!isLoading && <Rocket className="w-4 h-4 sm:hidden" />}
-                        </button>
-                      </div>
-                      
-                      {isLoading && (
-                        <div className="text-sm text-indigo-300 animate-pulse flex flex-col items-center gap-1 mt-2">
-                          <span className="font-medium">Analyse de votre structure en cours...</span>
-                          <span className="text-slate-400">Détection des points faibles et évaluation de votre potentiel de conversion...</span>
-                        </div>
-                      )}
-                    </form>
-                  </motion.div>
-
-                  {error && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="flex items-center justify-center gap-2 text-red-400 bg-red-900/30 border border-red-900/50 p-4 rounded-xl text-sm"
-                    >
-                      <AlertCircle className="w-5 h-5 shrink-0" />
-                      <p>{error}</p>
-                    </motion.div>
-                  )}
-                </div>
-              </section>
-            ) : (
-              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 p-6 sm:p-8 mb-8 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50 rounded-full blur-3xl -mr-20 -mt-20"></div>
-                <div className="relative z-10 max-w-3xl mx-auto">
-                  <h2 className="text-2xl font-bold text-slate-900 mb-2">Nouvelle analyse</h2>
-                  <p className="text-slate-500 mb-6">Entrez l'URL du site que vous souhaitez explorer et diagnostiquer.</p>
-                  <form onSubmit={handleExtract} className="relative flex flex-col gap-4">
-                    <div className="relative flex items-center">
-                      <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
-                        <Search className="h-6 w-6 text-slate-400" />
-                      </div>
-                      <input
-                        type="url"
-                        value={url}
-                        onChange={(e) => setUrl(e.target.value)}
-                        placeholder="https://exemple.com"
-                        required
-                        className="block w-full pl-14 pr-36 py-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-lg placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow"
-                      />
-                      <button
-                        type="submit"
-                        disabled={isLoading || userExtractions >= maxUserExtractions}
-                        className="absolute right-2 top-2 bottom-2 px-6 sm:px-8 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2 shadow-md"
-                      >
-                        {isLoading ? (
-                          <>
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                            <span className="hidden sm:inline">Analyse...</span>
-                          </>
-                        ) : (
-                          <span className="hidden sm:inline">Diagnostiquer</span>
-                        )}
-                        {!isLoading && <Rocket className="w-5 h-5 sm:hidden" />}
-                      </button>
-                    </div>
-                    
-                    {isLoading && (
-                      <div className="text-sm text-indigo-600 animate-pulse flex items-center gap-2 mt-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Analyse de la structure en cours...</span>
-                      </div>
-                    )}
-                    
-                    <div className="flex items-center gap-3 text-sm text-slate-600 mt-2">
-                      <div className="flex items-center gap-2">
-                        <input 
-                          type="checkbox" 
-                          id="deepScanDash" 
-                          checked={!user?.isAnonymous && deepScan} 
-                          disabled={user?.isAnonymous}
-                          onChange={(e) => setDeepScan(e.target.checked)}
-                          className={cn(
-                            "w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 transition-all",
-                            user?.isAnonymous && "opacity-50 cursor-not-allowed"
-                          )}
-                        />
-                        <label 
-                          htmlFor="deepScanDash" 
-                          className={cn(
-                            "cursor-pointer select-none transition-colors flex items-center gap-2",
-                            user?.isAnonymous ? "text-slate-400 cursor-not-allowed" : "hover:text-slate-900"
-                          )}
-                        >
-                          Exploration approfondie (Scanner jusqu'à 15 pages du site)
-                          {user?.isAnonymous && (
-                            <span className="text-[10px] font-bold bg-amber-50 text-amber-600 border border-amber-100 px-1.5 py-0.5 rounded uppercase tracking-wider">
-                              Connexion requise
-                            </span>
-                          )}
-                        </label>
-                      </div>
-                    </div>
-                  </form>
-                  {error && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="mt-4 flex items-center gap-2 text-red-600 bg-red-50 border border-red-100 p-4 rounded-xl text-sm"
-                    >
-                      <AlertCircle className="w-5 h-5 shrink-0" />
-                      <p>{error}</p>
-                    </motion.div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Landing Page Content (Visible when no search active AND not logged in) */}
-            {currentView === 'dashboard' && !pageData && !isLoading && !isDashboardView && (
-              <>
-                {/* Features Section */}
-                <section className="py-8">
-                  <div className="text-center mb-12">
-                    <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight mb-4">Une analyse complète en <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">quelques secondes</span></h2>
-                    <p className="text-lg text-slate-500 max-w-2xl mx-auto">Tout ce dont vous avez besoin pour comprendre et optimiser la structure de votre site, réuni dans un seul outil puissant.</p>
-                  </div>
-                  
-                  <div className="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto">
-                    {/* Large Card */}
-                    <div className="md:col-span-2 bg-slate-50 rounded-2xl p-8 border border-slate-200 relative overflow-hidden group hover:shadow-xl transition-all duration-500">
-                      <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-200/50 rounded-full blur-3xl -mr-20 -mt-20 transition-transform group-hover:scale-110"></div>
-                      <div className="relative z-10">
-                        <div className="w-12 h-12 bg-white text-indigo-600 rounded-xl flex items-center justify-center mb-6 shadow-sm border border-slate-100">
-                          <Search className="w-6 h-6" />
-                        </div>
-                        <h3 className="text-2xl font-bold text-slate-900 mb-3">Scan Profond & Exhaustif</h3>
-                        <p className="text-base text-slate-600 leading-relaxed max-w-md">Explorez votre site pour cartographier l'intégralité de vos liens internes et externes. Détectez les pages orphelines, les redirections et les erreurs de maillage en un clin d'œil.</p>
-                      </div>
-                    </div>
- 
-                    {/* Small Card 1 */}
-                    <div className="bg-slate-900 rounded-2xl p-8 relative overflow-hidden group hover:shadow-2xl transition-all duration-500 text-white">
-                      <div className="absolute bottom-0 right-0 w-40 h-40 bg-purple-500/30 rounded-full blur-2xl transition-transform group-hover:scale-150"></div>
-                      <div className="relative z-10">
-                        <div className="w-12 h-12 bg-white/10 text-purple-300 rounded-xl flex items-center justify-center mb-6 backdrop-blur-sm border border-white/10">
-                          <Sparkles className="w-6 h-6" />
-                        </div>
-                        <h3 className="text-xl font-bold mb-3">Diagnostic IA</h3>
-                        <p className="text-slate-300 text-sm leading-relaxed">Notre moteur Gemini 3.0 identifie instantanément les failles de conversion et les opportunités business.</p>
-                      </div>
-                    </div>
- 
-                    {/* Small Card 2 */}
-                    <div className="md:col-span-3 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl p-8 border border-emerald-100 relative overflow-hidden group hover:shadow-xl transition-all duration-500 flex flex-col md:flex-row items-center gap-8">
-                      <div className="flex-1 relative z-10">
-                        <div className="w-12 h-12 bg-white text-emerald-600 rounded-xl flex items-center justify-center mb-5 shadow-sm border border-emerald-100">
-                          <FileSpreadsheet className="w-6 h-6" />
-                        </div>
-                        <h3 className="text-xl font-bold text-slate-900 mb-3">Export Structuré & Actionnable</h3>
-                        <p className="text-base text-slate-600 leading-relaxed">Téléchargez vos données enrichies en CSV ou JSON. Idéal pour les intégrer à vos propres outils d'analyse, créer des rapports personnalisés ou les partager avec votre équipe technique.</p>
-                      </div>
-                      <div className="flex-1 w-full bg-white/60 backdrop-blur-sm rounded-2xl border border-white p-6 shadow-sm">
-                         <div className="space-y-4">
-                           <div className="flex items-center gap-4"><div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 text-xs font-bold">CSV</div><div className="h-3 bg-emerald-200/50 rounded w-3/4"></div></div>
-                           <div className="flex items-center gap-4"><div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 text-xs font-bold">JSON</div><div className="h-3 bg-indigo-200/50 rounded w-1/2"></div></div>
-                           <div className="flex items-center gap-4"><div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 text-xs font-bold">API</div><div className="h-3 bg-purple-200/50 rounded w-5/6"></div></div>
-                         </div>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                {/* How it works */}
-                <section className="py-16 bg-slate-50 rounded-3xl border border-slate-200/60 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-200/40 rounded-full blur-3xl -mr-20 -mt-20"></div>
-                  <div className="absolute bottom-0 left-0 w-96 h-96 bg-purple-200/40 rounded-full blur-3xl -ml-20 -mb-20"></div>
-                  
-                  <div className="text-center mb-16 relative z-10">
-                    <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight">Comment ça marche ?</h2>
-                    <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">Un processus simple et transparent en trois étapes pour auditer votre site web.</p>
-                  </div>
-                  
-                  <div className="max-w-5xl mx-auto relative z-10 px-4">
-                    {/* Connecting Line (Desktop only) */}
-                    <div className="hidden md:block absolute top-10 left-[15%] right-[15%] h-0.5 bg-gradient-to-r from-indigo-200 via-purple-300 to-emerald-200 rounded-full"></div>
-                    
-                    <div className="grid md:grid-cols-3 gap-10 md:gap-8">
-                      {/* Step 1 */}
-                      <div className="relative text-center group">
-                        <div className="w-16 h-16 mx-auto bg-white rounded-xl shadow-xl shadow-indigo-900/5 border border-slate-100 flex items-center justify-center relative z-10 mb-6 group-hover:-translate-y-1 transition-transform duration-300">
-                          <div className="absolute inset-0 bg-gradient-to-br from-indigo-50 to-white rounded-xl"></div>
-                          <span className="relative text-2xl font-black text-transparent bg-clip-text bg-gradient-to-br from-indigo-600 to-indigo-400">1</span>
-                        </div>
-                        <h3 className="text-xl font-bold text-slate-900 mb-3">Entrez votre URL</h3>
-                        <p className="text-base text-slate-600 leading-relaxed">Saisissez l'adresse de votre site. Notre robot parcourt vos pages pour en extraire la structure avec précision.</p>
-                      </div>
-                      
-                      {/* Step 2 */}
-                      <div className="relative text-center group">
-                        <div className="w-16 h-16 mx-auto bg-white rounded-xl shadow-xl shadow-purple-900/5 border border-slate-100 flex items-center justify-center relative z-10 mb-6 group-hover:-translate-y-1 transition-transform duration-300">
-                          <div className="absolute inset-0 bg-gradient-to-br from-purple-50 to-white rounded-xl"></div>
-                          <span className="relative text-2xl font-black text-transparent bg-clip-text bg-gradient-to-br from-purple-600 to-purple-400">2</span>
-                        </div>
-                        <h3 className="text-xl font-bold text-slate-900 mb-3">L'IA analyse</h3>
-                        <p className="text-base text-slate-600 leading-relaxed">Gemini évalue votre maillage, détecte votre type de business et repère les points de friction bloquants.</p>
-                      </div>
-                      
-                      {/* Step 3 */}
-                      <div className="relative text-center group">
-                        <div className="w-16 h-16 mx-auto bg-white rounded-xl shadow-xl shadow-emerald-900/5 border border-slate-100 flex items-center justify-center relative z-10 mb-6 group-hover:-translate-y-1 transition-transform duration-300">
-                          <div className="absolute inset-0 bg-gradient-to-br from-emerald-50 to-white rounded-xl"></div>
-                          <span className="relative text-2xl font-black text-transparent bg-clip-text bg-gradient-to-br from-emerald-600 to-emerald-400">3</span>
-                        </div>
-                        <h3 className="text-xl font-bold text-slate-900 mb-3">Passez à l'action</h3>
-                        <p className="text-base text-slate-600 leading-relaxed">Obtenez un score clair, des recommandations concrètes et exportez vos données pour agir immédiatement.</p>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                {/* CTA */}
-                {(!user || user.isAnonymous) && (
-                  <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 to-purple-700 p-8 sm:p-12 text-center shadow-2xl">
-                    <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "radial-gradient(circle at 2px 2px, white 1px, transparent 0)", backgroundSize: "24px 24px" }}></div>
-                    <div className="relative z-10">
-                      <h2 className="text-2xl md:text-4xl font-bold text-white mb-4 tracking-tight">Prêt à débloquer votre potentiel ?</h2>
-                      <p className="text-lg text-indigo-100 mb-8 max-w-2xl mx-auto">Rejoignez les utilisateurs qui optimisent déjà leur conversion grâce à l'analyse structurelle par IA.</p>
-                      <button onClick={handleLogin} className="px-8 py-4 bg-white text-indigo-600 hover:bg-indigo-50 font-extrabold rounded-xl shadow-xl shadow-indigo-900/20 transition-all hover:scale-105 hover:-translate-y-1 flex items-center gap-3 mx-auto text-base">
-                        <UserIcon className="w-5 h-5" />
-                        Créer un compte gratuit
-                      </button>
-                      <p className="mt-4 text-xs text-indigo-200 font-medium">Jusqu'à {maxUserExtractions} analyses gratuites avec un compte.</p>
-                    </div>
-                  </section>
-                )}
-                
-              </>
-            )}
-
-          </div>
-          {/* end max-w-6xl */}
-
-
-
-
-
-        {/* Results Area */}
-        {(currentView === 'dashboard' || currentView === 'analysis') && (
-          <AnimatePresence mode="wait">
-          {pageData && (
-            <motion.div
-              key="results"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-8"
-            >
-              {currentView === 'analysis' && (
-                <button
-                  onClick={() => setCurrentView('history')}
-                  className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-xl text-sm font-semibold transition-all shadow-sm w-fit mb-4"
+                <button 
+                  type="submit" 
+                  disabled={isLoading} 
+                  className="px-8 py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all disabled:opacity-70 flex items-center justify-center gap-2"
                 >
-                  <ArrowLeft className="w-4 h-4" />
-                  Retour à l'historique
+                  {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Rocket className="w-5 h-5" />}
+                  <span>{isLoading ? 'Extraction...' : 'Diagnostiquer'}</span>
                 </button>
-              )}
-              {/* Page Info & AI Action */}
-              <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow border border-slate-200 p-5 sm:p-6 flex flex-col sm:flex-row gap-6 justify-between items-start sm:items-center relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-40 h-40 bg-indigo-50 rounded-full blur-3xl -ml-10 -mt-10"></div>
-                <div className="space-y-1.5 relative z-10">
-                  <h3 className="font-bold text-xl text-slate-900 line-clamp-1" title={pageData.title}>
-                    {pageData.title}
-                  </h3>
-                  <p className="text-sm text-slate-500 line-clamp-2 max-w-2xl" title={pageData.description}>
-                    {pageData.description || 'Aucune description disponible.'}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-2 mt-3 text-xs font-semibold text-slate-600">
-                    <span className="bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
-                      {pageData.links.length} liens trouvés
-                    </span>
-                    <span className="bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
-                      {pageData.links.filter(l => !l.isExternal).length} internes
-                    </span>
-                    <span className="bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
-                      {pageData.links.filter(l => l.isExternal).length} externes
-                    </span>
-                    {pageData.pagesCrawled && pageData.pagesCrawled > 1 && (
-                      <span className="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg border border-indigo-100 flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5" />
-                        {pageData.pagesCrawled} pages explorées
-                      </span>
-                    )}
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap relative z-10">
-                  {user && !user.isAnonymous && (
-                    <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg p-0.5">
-                      <button onClick={handleExportCSV} className="flex items-center gap-1.5 px-2.5 py-2 text-xs font-medium text-slate-600 hover:text-indigo-600 hover:bg-white rounded-md transition-all" title="Exporter en CSV">
-                        <FileSpreadsheet className="w-3.5 h-3.5" />
-                        <span className="hidden md:inline">CSV</span>
-                      </button>
-                      <button onClick={handleExportJSON} className="flex items-center gap-1.5 px-2.5 py-2 text-xs font-medium text-slate-600 hover:text-indigo-600 hover:bg-white rounded-md transition-all" title="Exporter en JSON">
-                        <FileJson className="w-3.5 h-3.5" />
-                        <span className="hidden md:inline">JSON</span>
-                      </button>
-                    </div>
-                  )}
-                  <div className="flex flex-col items-end gap-1.5">
-                    <button
-                      onClick={() => {
-                        if (user?.isAnonymous) {
-                          setShowLoginModal(true);
-                        } else {
-                          handleAnalyze();
-                        }
-                      }}
-                      disabled={isAnalyzing || (!!aiAnalysis && !user?.isAnonymous) || pageData.links.length === 0}
-                      className={cn(
-                        "shrink-0 px-5 py-2.5 text-white text-sm font-semibold rounded-xl shadow-md transition-all flex items-center gap-2",
-                        user?.isAnonymous 
-                          ? "bg-slate-400 hover:bg-slate-500 shadow-slate-200" 
-                          : "bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 hover:shadow-lg hover:-translate-y-0.5",
-                        (isAnalyzing || (!!aiAnalysis && !user?.isAnonymous) || pageData.links.length === 0) && "opacity-70 cursor-not-allowed hover:translate-y-0"
-                      )}
-                    >
-                      {isAnalyzing ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Analyse...</span>
-                        </>
-                      ) : (aiAnalysis && !user?.isAnonymous) ? (
-                        <>
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>Terminé</span>
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-4 h-4" />
-                          <span>Diagnostic complet</span>
-                        </>
-                      )}
-                    </button>
-                    {user?.isAnonymous && (
-                      <span className="text-[10px] text-amber-600 font-medium flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">
-                        <AlertCircle className="w-3 h-3" />
-                        Connectez-vous pour utiliser l'IA
-                      </span>
-                    )}
-                  </div>
+              </form>
+              {error && <div className="text-red-400 text-sm mt-4 bg-red-900/20 p-3 rounded-lg border border-red-900/30">{error}</div>}
+              
+              <div className="pt-8 flex flex-wrap justify-center gap-8 text-slate-400 text-sm font-medium">
+                <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500" /> Extraction instantanée</div>
+                <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500" /> Audit IA Gemini</div>
+                <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500" /> Export CSV/JSON</div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {pageData && (
+          <div className="space-y-8">
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col sm:flex-row gap-6 justify-between items-center">
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-xl text-slate-900 truncate">{pageData.title}</h3>
+                <p className="text-sm text-slate-500 mt-1 line-clamp-1">{url}</p>
+                <div className="flex gap-2 mt-3">
+                  <span className="bg-slate-100 px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-600">{pageData.links.length} liens</span>
+                  <span className="bg-emerald-50 px-2.5 py-1 rounded-lg text-xs font-semibold text-emerald-600">{pageData.links.filter(l => !l.isExternal).length} internes</span>
+                  <span className="bg-amber-50 px-2.5 py-1 rounded-lg text-xs font-semibold text-amber-600">{pageData.links.filter(l => l.isExternal).length} externes</span>
                 </div>
               </div>
-
-              {/* AI Analysis Results */}
-              {aiError && (
-                <div className="flex items-center gap-2 text-red-600 bg-red-50 p-4 rounded-lg text-sm">
-                  <AlertCircle className="w-5 h-5 shrink-0" />
-                  <p>{aiError}</p>
-                </div>
-              )}
-
-              {aiAnalysis && (
-                <motion.div
-                  key="ai-analysis"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  className="space-y-6"
+              <div className="flex gap-2 shrink-0">
+                <button 
+                  onClick={() => { setPageData(null); setAiAnalysis(null); }} 
+                  className="px-4 py-2 text-slate-600 hover:text-slate-900 font-medium transition-colors"
                 >
-                  {/* 1. Header */}
-                  <div className="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 shadow-sm">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-                      <div>
-                        <h2 className="text-xl font-bold text-slate-900">Analyse de : {new URL(url).hostname}</h2>
-                        <p className="text-xs text-slate-500 mt-0.5 capitalize">Type détecté : {aiAnalysis.business_type}</p>
-                      </div>
-                      <div className="flex flex-col items-end">
-                        <div className="text-xs text-slate-500 mb-0.5">Score global</div>
-                        <div className={cn(
-                          "text-3xl font-black",
-                          aiAnalysis.score_global >= 80 ? "text-emerald-500" :
-                          aiAnalysis.score_global >= 50 ? "text-amber-500" : "text-red-500"
-                        )}>
-                          {aiAnalysis.score_global} <span className="text-lg text-slate-300">/ 100</span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className={cn(
-                      "p-3 rounded-lg flex items-start gap-3",
-                      aiAnalysis.score_global >= 80 ? "bg-emerald-50 text-emerald-800 border border-emerald-100" :
-                      aiAnalysis.score_global >= 50 ? "bg-amber-50 text-amber-800 border border-amber-100" : 
-                      "bg-red-50 text-red-800 border border-red-100"
-                    )}>
-                      {aiAnalysis.score_global >= 80 ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" /> :
-                       aiAnalysis.score_global >= 50 ? <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /> :
-                       <XCircle className="w-4 h-4 shrink-0 mt-0.5" />}
-                      <p className="text-sm font-medium">{aiAnalysis.main_message}</p>
-                    </div>
-                  </div>
+                  Nouvelle analyse
+                </button>
+                <button 
+                  onClick={() => { if(user?.isAnonymous) setShowLoginModal(true); else handleAnalyze(); }} 
+                  disabled={isAnalyzing || (!!aiAnalysis && !user?.isAnonymous)} 
+                  className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl shadow-md hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  {aiAnalysis && !user?.isAnonymous ? 'Audit terminé' : 'Lancer l\'audit IA'}
+                </button>
+              </div>
+            </div>
 
-                  {/* 2. Score détaillé */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {[
-                      { label: 'Structure', score: aiAnalysis.scores.structure },
-                      { label: 'Conversion', score: aiAnalysis.scores.conversion },
-                      { label: 'Présence digitale', score: aiAnalysis.scores.presence }
-                    ].map((item) => (
-                      <div key={item.label} className="bg-white rounded-xl border border-slate-200 p-5 flex items-center justify-between">
-                        <span className="font-medium text-slate-700">{item.label}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-900">{item.score}/100</span>
-                          {item.score >= 80 ? <span className="text-emerald-500 text-sm font-medium">✅ Bon</span> :
-                           item.score >= 50 ? <span className="text-amber-500 text-sm font-medium">⚠️ Moyen</span> :
-                           <span className="text-red-500 text-sm font-medium">❌ Faible</span>}
-                        </div>
-                      </div>
-                    ))}
+            {aiAnalysis && (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+                <div className="bg-slate-900 rounded-3xl p-8 text-white shadow-xl flex flex-col md:flex-row gap-8 items-center border border-slate-800">
+                  <div className="flex-1 text-center md:text-left">
+                    <h2 className="text-3xl font-black mb-4">Diagnostic IA : {aiAnalysis.score_global}/100</h2>
+                    <p className="text-indigo-200 italic opacity-90 text-lg">"{aiAnalysis.main_message}"</p>
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Problèmes */}
-                    <div className="bg-white rounded-xl border border-red-100 p-5 sm:p-6 shadow-sm">
-                      <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 text-red-500" />
-                        Problèmes détectés
-                      </h3>
-                      <ul className="space-y-4">
-                        {aiAnalysis.problems.map((problem, idx) => (
-                          <li key={idx} className="flex items-start gap-2.5">
-                            <span className="text-red-500 mt-0.5 text-xs">❌</span>
-                            <div>
-                              <h4 className="font-semibold text-slate-900 text-sm">{problem.title}</h4>
-                              <p className="text-slate-600 text-xs mt-0.5 flex items-center gap-1">
-                                <ArrowRight className="w-2.5 h-2.5 text-slate-400" />
-                                {problem.impact}
-                              </p>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
- 
-                    {/* Opportunités */}
-                    <div className="bg-white rounded-xl border border-emerald-100 p-5 sm:p-6 shadow-sm">
-                      <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-emerald-500" />
-                        Opportunités
-                      </h3>
-                      <ul className="space-y-3">
-                        {aiAnalysis.opportunities.map((opp, idx) => (
-                          <li key={idx} className="flex items-start gap-2.5">
-                            <span className="text-emerald-500 mt-0.5 text-xs">✅</span>
-                            <span className="text-slate-700 text-sm">{opp}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-
-                  {/* 5. Call-to-Action */}
-                  <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-xl p-6 text-center text-white shadow-lg">
-                    <h3 className="text-xl font-bold mb-2">
-                      {aiAnalysis.business_type.toLowerCase() === 'restaurant' 
-                        ? "Créez votre système de réservation en 2 minutes" 
-                        : "Améliorez votre site dès maintenant"}
-                    </h3>
-                    <p className="text-indigo-100 text-sm mb-5 max-w-lg mx-auto">
-                      Ne laissez plus vos visiteurs repartir sans agir. Mettez en place les solutions recommandées pour augmenter votre taux de conversion.
-                    </p>
-                    {/* Remplacez le href par le lien vers votre page de contact, calendrier (Calendly) ou page de paiement */}
-                    <a 
-                      href="mailto:gnzikoune@gmail.com" 
-                      className="bg-white text-indigo-600 hover:bg-indigo-50 font-bold py-2.5 px-6 rounded-lg transition-all hover:scale-105 shadow-md inline-flex items-center gap-2 mx-auto text-sm"
-                    >
-                      <Rocket className="w-4 h-4" />
-                      {aiAnalysis.business_type.toLowerCase() === 'restaurant' 
-                        ? "Créer mon système" 
-                        : "Voir les solutions"}
-                    </a>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Links List/Grid */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-lg">
-                    {aiAnalysis ? 'Détail de la structure (Catégorisée)' : 'Structure brute détectée'}
-                  </h3>
-                  <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-1">
-                    <button
-                      onClick={() => setViewMode('list')}
-                      className={cn(
-                        "p-1.5 rounded-md transition-colors",
-                        viewMode === 'list' ? "bg-slate-100 text-slate-900" : "text-slate-400 hover:text-slate-600"
-                      )}
-                    >
-                      <ListIcon className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => setViewMode('grid')}
-                      className={cn(
-                        "p-1.5 rounded-md transition-colors",
-                        viewMode === 'grid' ? "bg-slate-100 text-slate-900" : "text-slate-400 hover:text-slate-600"
-                      )}
-                    >
-                      <LayoutGrid className="w-4 h-4" />
-                    </button>
+                  <div className="grid grid-cols-3 gap-6">
+                    <div className="text-center"><span className="block text-2xl font-bold">{aiAnalysis.scores.structure}</span><span className="text-[10px] uppercase font-bold opacity-50">Structure</span></div>
+                    <div className="text-center"><span className="block text-2xl font-bold">{aiAnalysis.scores.conversion}</span><span className="text-[10px] uppercase font-bold opacity-50">Conversion</span></div>
+                    <div className="text-center"><span className="block text-2xl font-bold">{aiAnalysis.scores.presence}</span><span className="text-[10px] uppercase font-bold opacity-50">Présence</span></div>
                   </div>
                 </div>
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="bg-white rounded-xl border border-red-100 p-6">
+                    <h4 className="font-bold mb-4 flex items-center gap-2 text-red-600"><AlertCircle className="w-4 h-4" /> Points de friction</h4>
+                    <ul className="space-y-3">
+                      {aiAnalysis.problems.map((p, i) => (
+                        <li key={i}><span className="font-semibold text-slate-800 text-sm">{p.title}</span><p className="text-slate-500 text-xs mt-1">{p.impact}</p></li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="bg-white rounded-xl border border-emerald-100 p-6">
+                    <h4 className="font-bold mb-4 flex items-center gap-2 text-emerald-600"><Sparkles className="w-4 h-4" /> Opportunités</h4>
+                    <ul className="space-y-3">
+                      {aiAnalysis.opportunities.map((o, i) => (
+                        <li key={i} className="text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500" />{o}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </motion.div>
+            )}
 
-                {pageData.links.length === 0 ? (
-                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-8 text-center space-y-3">
-                    <div className="flex justify-center">
-                      <AlertCircle className="w-10 h-10 text-slate-400" />
-                    </div>
-                    <h4 className="text-lg font-medium text-slate-900">Aucun lien trouvé</h4>
-                    <p className="text-slate-500 max-w-md mx-auto">
-                      Nous n'avons trouvé aucun lien sur cette page. Cela peut arriver si le site nécessite l'exécution de JavaScript pour afficher son contenu (applications React, Vue, etc.) ou s'il bloque les accès automatisés.
-                    </p>
-                  </div>
-                ) : aiAnalysis ? (
-                  <div className="space-y-8">
-                    {pageData.links.length > 800 && (
-                      <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl text-sm flex items-start gap-3">
-                        <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" />
-                        <p>
-                          <strong>Note :</strong> La page contient un très grand nombre de liens ({pageData.links.length}). Pour des raisons de performance de l'IA, seuls les 800 premiers liens ont été catégorisés.
-                        </p>
-                      </div>
-                    )}
-                    {(Object.entries(aiAnalysis.categories) as [string, ExtractedLink[]][]).map(([category, links]) => (
-                      <div key={category} className="space-y-3">
-                        <h4 className="font-medium text-slate-700 flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
-                          {category} <span className="text-slate-400 text-sm font-normal">({links.length})</span>
-                        </h4>
-                        <LinkList links={links} viewMode={viewMode} />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="space-y-8">
-                    <div className="space-y-3">
-                      <h4 className="font-medium text-slate-700 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                        Pages du site (Liens internes) <span className="text-slate-400 text-sm font-normal">({pageData.links.filter(l => !l.isExternal).length})</span>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="font-bold text-lg">Structure des liens détectée</h3>
+                <div className="flex gap-1 bg-white border border-slate-200 rounded-lg p-1">
+                  <button onClick={() => setViewMode('list')} className={cn("p-1.5 rounded-md", viewMode === 'list' ? "bg-slate-100" : "text-slate-400")}><ListIcon className="w-4 h-4" /></button>
+                  <button onClick={() => setViewMode('grid')} className={cn("p-1.5 rounded-md", viewMode === 'grid' ? "bg-slate-100" : "text-slate-400")}><LayoutGrid className="w-4 h-4" /></button>
+                </div>
+              </div>
+              {aiAnalysis ? (
+                <div className="space-y-8">
+                  {(Object.entries(aiAnalysis.categories) as [string, ExtractedLink[]][]).map(([cat, links]) => (
+                    <div key={cat} className="space-y-3">
+                      <h4 className="font-semibold text-slate-700 flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-500"/>{cat} ({links.length})
                       </h4>
-                      <LinkList links={pageData.links.filter(l => !l.isExternal)} viewMode={viewMode} />
+                      <LinkList links={links} viewMode={viewMode} />
                     </div>
-                    <div className="space-y-3">
-                      <h4 className="font-medium text-slate-700 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                        Ressources externes <span className="text-slate-400 text-sm font-normal">({pageData.links.filter(l => l.isExternal).length})</span>
-                      </h4>
-                      <LinkList links={pageData.links.filter(l => l.isExternal)} viewMode={viewMode} />
-                    </div>
-                  </div>
-                )}
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-8">
+                  <div className="space-y-3"><h4 className="font-semibold text-slate-700">Liens Internes</h4><LinkList links={pageData.links.filter(l => !l.isExternal)} viewMode={viewMode} /></div>
+                  <div className="space-y-3"><h4 className="font-semibold text-slate-700">Liens Externes</h4><LinkList links={pageData.links.filter(l => l.isExternal)} viewMode={viewMode} /></div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  return (
+    <div className={cn("min-h-screen bg-slate-50 text-slate-900 font-sans", isDashboardView ? "flex" : "")}>
+      <Helmet>
+        <title>ExtracteurIA | Audit SEO & Link Extractor AI</title>
+        <meta name="description" content="Outil gratuit pour extraire les liens d'une URL et obtenir un diagnostic IA complet." />
+      </Helmet>
+
+      {/* Sidebar (Desktop - Only for Auth Users) */}
+      {isDashboardView && (
+        <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col fixed inset-y-0 z-20">
+          <div className="h-16 flex items-center px-6 border-b border-slate-200">
+            <div className="bg-indigo-600 p-1.5 rounded-lg text-white mr-3"><LinkIcon className="w-5 h-5" /></div>
+            <h1 className="font-bold text-lg tracking-tight">Extracteur<span className="text-indigo-600">IA</span></h1>
+          </div>
+          <nav className="flex-1 p-4 space-y-1">
+            <Link to="/" className={cn("flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all", location.pathname === '/' ? "bg-indigo-50 text-indigo-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}>
+              <LayoutGrid className="w-5 h-5" /> Dashboard
+            </Link>
+            <Link to="/history" className={cn("flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all", location.pathname === '/history' ? "bg-indigo-50 text-indigo-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}>
+              <History className="w-5 h-5" /> Historique
+            </Link>
+            {isAdmin && (
+              <Link to="/admin" className={cn("flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all", location.pathname === '/admin' ? "bg-purple-50 text-purple-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}>
+                <ShieldAlert className="w-5 h-5" /> Administration
+              </Link>
+            )}
+            <Link to="/docs" className={cn("flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all", location.pathname === '/docs' ? "bg-blue-50 text-blue-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}>
+              <BookOpen className="w-5 h-5" /> Documentation
+            </Link>
+          </nav>
+          <div className="p-4 border-t border-slate-200">
+            <div className="flex items-center gap-3 p-2 rounded-xl bg-slate-50 border border-slate-100">
+              {user.photoURL ? (
+                <img src={user.photoURL} className="w-10 h-10 rounded-full border border-white shadow-sm" alt="profile"/>
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center font-bold text-indigo-600">{user.email?.[0].toUpperCase()}</div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold truncate text-slate-900">{user.displayName || 'Utilisateur'}</p>
+                <p className="text-[10px] text-slate-500 truncate">{user.email}</p>
+              </div>
+              <button onClick={handleLogout} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </aside>
+      )}
+
+      {/* Main Content Area */}
+      <div className={cn("flex-1 flex flex-col", isDashboardView ? "md:ml-64" : "")}>
+        <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-30">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 h-full flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {!isDashboardView && (
+                <>
+                  <div className="bg-indigo-600 p-1.5 rounded-lg text-white"><LinkIcon className="w-5 h-5" /></div>
+                  <h1 className="font-bold text-xl tracking-tight">Extracteur<span className="text-indigo-600">IA</span></h1>
+                </>
+              )}
+              {isDashboardView && (
+                <div className="md:hidden flex items-center gap-2">
+                  <div className="bg-indigo-600 p-1 rounded-lg text-white"><LinkIcon className="w-5 h-5" /></div>
+                  <span className="font-bold">ExtracteurIA</span>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex items-center gap-4">
+              {isAuthReady && (!user || user.isAnonymous) ? (
+                <button 
+                  onClick={handleLogin} 
+                  className="px-5 py-2 bg-slate-900 text-white font-bold rounded-xl text-sm hover:bg-slate-800 transition-all shadow-md active:scale-95"
+                >
+                  Se connecter
+                </button>
+              ) : (
+                <div className="flex items-center gap-2 bg-indigo-50 px-3 py-1.5 rounded-full text-indigo-700 text-xs font-bold border border-indigo-100">
+                  <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                  Quota : {userExtractions}/{maxUserExtractions}
+                </div>
+              )}
+            </div>
+          </div>
+        </header>
+
+        <main className="flex-1 p-4 sm:p-6 lg:p-8">
+          <Routes>
+            <Route path="/" element={<div className="max-w-6xl mx-auto">{renderMainContent()}</div>} />
+            <Route path="/analysis" element={<div className="max-w-6xl mx-auto"><Helmet><title>Analyse - ExtracteurIA</title></Helmet>{renderMainContent()}</div>} />
+            <Route path="/history" element={<div className="max-w-6xl mx-auto"><HistoryView history={history} isLoading={isLoadingHistory} onScore={handleScoreFromHistory} onDelete={handleDeleteHistory} /></div>} />
+            <Route path="/admin" element={isAdmin ? <div className="max-w-6xl mx-auto"><AdminView allHistory={allHistory} allUsers={allUsers} isLoading={isLoadingAdmin} maxAnonExtractions={maxAnonExtractions} maxUserExtractions={maxUserExtractions} setMaxAnonExtractions={setMaxAnonExtractions} setMaxUserExtractions={setMaxUserExtractions} emailVerifyApiKey={emailVerifyApiKey} setEmailVerifyApiKey={setEmailVerifyApiKey} geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey} onScore={handleScoreFromHistory} onDeleteHistory={handleDeleteHistory} onDeleteUser={handleDeleteUser} /></div> : <Navigate to="/" />} />
+            <Route path="/docs" element={<div className="max-w-6xl mx-auto"><DocumentationView maxUserExtractions={maxUserExtractions} maxAnonExtractions={maxAnonExtractions} /></div>} />
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </main>
+
+        <footer className="max-w-6xl mx-auto w-full px-6 py-12 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-6 text-slate-500 text-sm">
+          <div className="flex items-center gap-2">
+            <LinkIcon className="w-5 h-5 text-indigo-600" />
+            <span className="font-bold text-slate-900">Extracteur de Liens IA</span>
+          </div>
+          <div className="flex flex-col sm:flex-row items-center gap-4 font-medium">
+            <p>© {new Date().getFullYear()} Gildas NZIKOUNÉ. Tous droits réservés.</p>
+          </div>
+        </footer>
+      </div>
+
+      {/* Modals */}
+      <AnimatePresence>
+        {showQuotaModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowQuotaModal(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative bg-white rounded-3xl p-8 max-w-md w-full text-center shadow-2xl">
+              <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-6"><AlertCircle className="w-8 h-8" /></div>
+              <h3 className="text-2xl font-bold mb-3 text-slate-900">Limite atteinte</h3>
+              <p className="text-slate-600 mb-8 leading-relaxed">Vous avez atteint la limite de {maxAnonExtractions} analyses gratuites. Connectez-vous pour débloquer jusqu'à {maxUserExtractions} diagnostics IA.</p>
+              <div className="flex flex-col gap-3">
+                <button onClick={() => { setShowQuotaModal(false); handleLogin(); }} className="w-full py-4 bg-indigo-600 text-white font-bold rounded-2xl shadow-lg hover:bg-indigo-700 transition-all">Se connecter avec Google</button>
+                <button onClick={() => setShowQuotaModal(false)} className="w-full py-4 bg-slate-50 text-slate-600 font-bold rounded-2xl hover:bg-slate-100 transition-all">Plus tard</button>
               </div>
             </motion.div>
-          )}
-        </AnimatePresence>
+          </div>
         )}
-
-        {/* History View */}
-        {currentView === 'history' && (
-          <HistoryView 
-            history={history} 
-            isLoading={isLoadingHistory} 
-            onScore={handleScoreFromHistory}
-            onDelete={handleDeleteHistory}
-          />
+        {showLoginModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowLoginModal(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative bg-white rounded-3xl p-8 max-w-md w-full text-center shadow-2xl">
+              <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6"><Sparkles className="w-8 h-8" /></div>
+              <h3 className="text-2xl font-bold mb-3 text-slate-900">Diagnostic IA Premium</h3>
+              <p className="text-slate-600 mb-8 leading-relaxed">Le rapport complet par intelligence artificielle nécessite un compte. Connectez-vous gratuitement pour auditer votre site.</p>
+              <div className="flex flex-col gap-3">
+                <button onClick={() => { setShowLoginModal(false); handleLogin(); }} className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold rounded-2xl shadow-lg hover:opacity-90 transition-all">Créer un compte gratuit</button>
+                <button onClick={() => setShowLoginModal(false)} className="w-full py-4 bg-slate-50 text-slate-600 font-bold rounded-2xl hover:bg-slate-100 transition-all">Continuer sans l'IA</button>
+              </div>
+            </motion.div>
+          </div>
         )}
-
-        {/* Admin View */}
-        {currentView === 'admin' && isAdmin && (
-          <AdminView 
-            allHistory={allHistory} 
-            allUsers={allUsers} 
-            isLoading={isLoadingAdmin} 
-            maxAnonExtractions={maxAnonExtractions}
-            maxUserExtractions={maxUserExtractions}
-            setMaxAnonExtractions={setMaxAnonExtractions}
-            setMaxUserExtractions={setMaxUserExtractions}
-            emailVerifyApiKey={emailVerifyApiKey}
-            setEmailVerifyApiKey={setEmailVerifyApiKey}
-            geminiApiKey={geminiApiKey}
-            setGeminiApiKey={setGeminiApiKey}
-            onScore={handleScoreFromHistory}
-            onDeleteHistory={handleDeleteHistory}
-            onDeleteUser={handleDeleteUser}
-          />
-        )}
-
-        {currentView === 'documentation' && (
-          <DocumentationView 
-            maxUserExtractions={maxUserExtractions} 
-            maxAnonExtractions={maxAnonExtractions} 
-          />
-        )}
-
-        {/* Mobile Bottom Navigation */}
-        {isDashboardView && (
-          <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 flex justify-around items-center h-16 px-2 pb-safe">
-            <button 
-              onClick={() => setCurrentView('dashboard')}
-              className={cn("flex flex-col items-center justify-center w-full h-full gap-1", currentView === 'dashboard' ? "text-indigo-600" : "text-slate-500")}
-            >
-              <LayoutGrid className="w-5 h-5" />
-              <span className="text-[10px] font-medium">Tableau de bord</span>
-            </button>
-            
-            {user && !user.isAnonymous && (
-              <button 
-                onClick={() => setCurrentView('history')}
-                className={cn("flex flex-col items-center justify-center w-full h-full gap-1", currentView === 'history' ? "text-indigo-600" : "text-slate-500")}
-              >
-                <History className="w-5 h-5" />
-                <span className="text-[10px] font-medium">Historique</span>
-              </button>
-            )}
-
-            {isAdmin && (
-              <button 
-                onClick={() => setCurrentView('admin')}
-                className={cn("flex flex-col items-center justify-center w-full h-full gap-1", currentView === 'admin' ? "text-purple-600" : "text-slate-500")}
-              >
-                <ShieldAlert className="w-5 h-5" />
-                <span className="text-[10px] font-medium">Admin</span>
-              </button>
-            )}
-
-            <button 
-              onClick={() => setCurrentView('documentation')}
-              className={cn("flex flex-col items-center justify-center w-full h-full gap-1", currentView === 'documentation' ? "text-blue-600" : "text-slate-500")}
-            >
-              <BookOpen className="w-5 h-5" />
-              <span className="text-[10px] font-medium">Docs</span>
-            </button>
-          </nav>
-        )}
-
-        {/* Quota Reached Modal */}
-        <AnimatePresence>
-          {showQuotaModal && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setShowQuotaModal(false)}
-                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-              />
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                className="relative bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full text-center"
-              >
-                <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <AlertCircle className="w-8 h-8" />
-                </div>
-                <h3 className="text-2xl font-bold text-slate-900 mb-3">Limite atteinte</h3>
-                <p className="text-slate-600 mb-8 leading-relaxed">
-                  Vous avez atteint la limite de {maxAnonExtractions} extractions gratuites. 
-                  Connectez-vous avec votre compte Google pour continuer à utiliser l'outil (jusqu'à {maxUserExtractions} extractions).
-                </p>
-                <div className="flex flex-col gap-3">
-                  <button
-                    onClick={() => {
-                      setShowQuotaModal(false);
-                      handleLogin();
-                    }}
-                    className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-indigo-200"
-                  >
-                    Se connecter avec Google
-                  </button>
-                  <button
-                    onClick={() => setShowQuotaModal(false)}
-                    className="w-full py-4 bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold rounded-2xl transition-all"
-                  >
-                    Plus tard
-                  </button>
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
-
-        {/* Login Required for IA Modal */}
-        <AnimatePresence>
-          {showLoginModal && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setShowLoginModal(false)}
-                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-              />
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                className="relative bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full text-center"
-              >
-                <div className="w-16 h-16 bg-purple-50 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Sparkles className="w-8 h-8" />
-                </div>
-                <h3 className="text-2xl font-bold text-slate-900 mb-3">Fonctionnalité Premium</h3>
-                <p className="text-slate-600 mb-8 leading-relaxed">
-                  Le diagnostic complet par IA nécessite un compte gratuit. 
-                  Connectez-vous pour analyser la pertinence, les problèmes et les opportunités de ce site.
-                </p>
-                <div className="flex flex-col gap-3">
-                  <button
-                    onClick={() => {
-                      setShowLoginModal(false);
-                      handleLogin();
-                    }}
-                    className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-indigo-200"
-                  >
-                    Se connecter gratuitement
-                  </button>
-                  <button
-                    onClick={() => setShowLoginModal(false)}
-                    className="w-full py-4 bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold rounded-2xl transition-all"
-                  >
-                    Continuer sans l'IA
-                  </button>
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
-
-          {/* Footer */}
-          <footer className="pt-8 pb-4 border-t border-slate-200 text-center text-slate-500 text-sm flex flex-col sm:flex-row justify-between items-center gap-4 mt-12">
-            <div className="flex items-center gap-2">
-              <LinkIcon className="w-5 h-5 text-indigo-600" />
-              <span className="font-bold text-slate-900 text-base">Extracteur de Liens IA</span>
-            </div>
-            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-6 font-medium">
-              <p>Développé par <a href="https://www.linkedin.com/in/gildas-nzikoune" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 transition-colors">Gildas NZIKOUNÉ</a></p>
-              <p className="hidden sm:block text-slate-300">•</p>
-              <p>© {new Date().getFullYear()} Tous droits réservés.</p>
-            </div>
-          </footer>
-        </main>
-      </div>
+      </AnimatePresence>
     </div>
   );
 }
 
 function LinkList({ links, viewMode }: { links: ExtractedLink[], viewMode: 'list' | 'grid' }) {
-  if (links.length === 0) {
-    return <div className="text-slate-500 text-sm italic py-4">Aucun lien trouvé dans cette catégorie.</div>;
-  }
-
-  if (viewMode === 'grid') {
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {links.map((link, i) => (
-          <a
-            key={i}
-            href={link.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="group bg-white border border-slate-200 hover:border-indigo-300 rounded-xl p-4 transition-all hover:shadow-md flex flex-col gap-2"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <span className="font-medium text-slate-900 line-clamp-2 group-hover:text-indigo-600 transition-colors">
-                {link.text || 'Lien sans titre'}
-              </span>
-              {link.isExternal && <ExternalLink className="w-4 h-4 text-slate-400 shrink-0 mt-1" />}
-            </div>
-            <span className="text-xs text-slate-500 truncate" title={link.href}>
-              {link.href}
-            </span>
-          </a>
-        ))}
-      </div>
-    );
-  }
+  if (links.length === 0) return <div className="text-slate-400 text-sm italic py-4">Aucun lien trouvé.</div>;
+  
+  if (viewMode === 'grid') return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {links.map((link, i) => (
+        <a key={i} href={link.href} target="_blank" rel="noopener noreferrer" className="bg-white border border-slate-200 hover:border-indigo-300 rounded-xl p-4 transition-all hover:shadow-md flex flex-col gap-2 group">
+          <div className="flex items-start justify-between gap-2">
+            <span className="font-semibold text-slate-900 line-clamp-2 group-hover:text-indigo-600 transition-colors">{link.text || 'Lien sans texte'}</span>
+            {link.isExternal && <ExternalLink className="w-3.5 h-3.5 text-slate-300 shrink-0" />}
+          </div>
+          <span className="text-xs text-slate-400 truncate">{link.href}</span>
+        </a>
+      ))}
+    </div>
+  );
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100">
+    <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100 overflow-hidden shadow-sm">
       {links.map((link, i) => (
-        <a
-          key={i}
-          href={link.href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="group flex items-center justify-between p-4 hover:bg-slate-50 transition-colors"
-        >
+        <a key={i} href={link.href} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-4 hover:bg-slate-50 group transition-colors">
           <div className="flex items-center gap-4 min-w-0">
-            <div className="bg-slate-100 p-2 rounded-lg group-hover:bg-indigo-100 transition-colors shrink-0">
-              <LinkIcon className="w-4 h-4 text-slate-500 group-hover:text-indigo-600" />
-            </div>
+            <div className="bg-slate-100 p-2 rounded-lg group-hover:bg-indigo-100 text-slate-500 group-hover:text-indigo-600 transition-colors"><LinkIcon className="w-4 h-4" /></div>
             <div className="min-w-0">
-              <p className="font-medium text-slate-900 truncate group-hover:text-indigo-600 transition-colors">
-                {link.text || 'Lien sans titre'}
-              </p>
-              <p className="text-xs text-slate-500 truncate" title={link.href}>
-                {link.href}
-              </p>
+              <p className="font-semibold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">{link.text || 'Lien sans texte'}</p>
+              <p className="text-xs text-slate-400 truncate">{link.href}</p>
             </div>
           </div>
-          {link.isExternal && (
-            <ExternalLink className="w-4 h-4 text-slate-400 shrink-0 ml-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-          )}
+          {link.isExternal && <ExternalLink className="w-4 h-4 text-slate-200 ml-4" />}
         </a>
       ))}
     </div>
   );
 }
-
-
